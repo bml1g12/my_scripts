@@ -1,0 +1,45 @@
+#!/bin/bash
+##########################################################################################
+# Takes a pdb file as input and creates a pdb file with desired species removed
+#
+# v1.00 2009.10.26 jd, first version
+##########################################################################################
+##########################################################################################
+
+ver="1.00"
+
+##########################################################################################
+
+echo
+echo "*** pdbstrip v$ver. Strips desired species from a pdb file."
+echo "                    2009.10 Jacek Dziedzic, jack.erede@gmail.com"
+echo
+
+if [ $# -ne 2 ]; then
+  echo "Supply two arguments -- name of the input pdb file and the species or residue to remove. Aborting!" >&2
+  exit 101
+fi
+
+f=$1
+
+if [ ! -r "$f" ]; then
+  echo "$f not readable. Aborting!" >&2
+  exit 102
+fi
+
+fout="$f"".out"
+
+echo "Creating $fout..."
+
+# Parse the PDB file, removing atoms as necessary
+cat $f | awk -v toremove="$2" '
+            
+                     {
+	               atname=$3;
+		       residuename=$4;
+		       if($1=="ATOM" && (atname == toremove || residuename == toremove)) next; else print $0;
+		     }
+              ' >>$fout
+
+echo 
+echo "Done!"

@@ -1,0 +1,55 @@
+#!/bin/bash
+
+outunit="energy_kcal_per_mol"
+#outunit="energy_kJ_per_mol"
+#outunit="energy_au"
+
+if [ $# -ne 2 ]; then
+  echo "Improper invocation. Supply two parameters that are the names of onetep .out files for: solvated, in-vacuum." >&2
+  exit 1
+fi
+
+solv="$1"
+vacu="$2"
+
+if [ ! -r $solv ]; then
+  echo "$solv does not exist, aborting!" >&2
+  exit 2
+fi
+if [ ! -r $vacu ]; then
+  echo "$vacu does not exist, aborting!" >&2
+  exit 3
+fi
+
+if [ `getenergy >/dev/null; echo $?` != 101 ]; then
+  echo "getenergy not found in \$PATH. Aborting!" >&2
+  exit 11
+fi
+if [ `unitconv >/dev/null; echo $?` != 101 ]; then
+  echo "unitconv not found in \$PATH. Aborting!" >&2
+  exit 12
+fi
+
+echo "Solvated:  $solv"
+echo "In-vacuum: $vacu"
+echo "Output unit $outunit"
+
+n=0
+for type in total kinetic psloc psnl hartree xc ionion ewald dispersion smearedself smearednonself cavitation; do
+  echo "----- Contribution to solvation energy ($type) -----"
+  Esolv=`getenergy $solv $type | unitconv energy_au $outunit /dev/stdin 2>/dev/null`
+  Evacu=`getenergy $vacu $type | unitconv energy_au $outunit /dev/stdin 2>/dev/null`
+  absentin=""
+  if [ -z "$Esolv" ]; then
+    absentin=" in solvated"
+  fi
+  if [ -z "$Evacu" ]; then
+    absentin="$absentin in vacuum"
+  fi
+  if [ ! -z "$absentin" ]; then
+    echo "      *** Energy term absent$absentin"
+  else
+    echo $Esolv $Evacu | awk 'BEGIN{printf("      solvated         vacuum   dG_solvation\n")} {printf("%14.4f %14.4f %14.4f\n",$1,$2,$1-$2)}'
+  fi
+  [ $n -eq 0 ] && echo && let "n++"
+done

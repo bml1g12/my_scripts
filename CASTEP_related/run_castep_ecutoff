@@ -1,0 +1,76 @@
+#!/bin/bash
+# Run Castep batch job
+
+# set default resource requirements for job 
+# - these can be overridden on the qsub command line 
+# (this is for a 4 hour job on a single node using 8 processors per node)
+#PBS -N cutoff_scan_EXP
+#PBS -l nodes=1,tpn=16,naccesspolicy=singlejob
+#jobs less than 4h get priority bonus
+#PBS -l walltime=48:00:00
+
+#Change to directory from which job was submitted
+###########
+
+cd .
+#cd $PBS_O_WORKDIR
+
+ndatfiles=`ls *.param | wc -l`
+
+if [ $ndatfiles -eq 0 ]; then
+  echo "No .param files in `pwd`. Aborting." >&2
+  exit 101
+fi
+
+if [ $ndatfiles -gt 1 ]; then
+  echo "More than one param file in `pwd`, don't know which one to choose. Aborting." >&2
+  exit 102
+fi
+
+rootname=`echo *.param | sed -r "s/\.param\$//"`
+
+set basenname for calculation
+seed=$rootname
+
+# set up directory for temporary files 
+export TMPDIR=/scratch/$USER/castep-${seed}_$$
+mkdir -p $TMPDIR
+
+# setup software environment
+module load openmpi castep
+
+# run the program
+echo "--- Running $rootname in `pwd`. It's `date`"
+
+export MPI_DSM_DISTRIBUTE=yes   # Not sure if this is necessary!
+
+i=100
+while [ $i -le 1200 ]
+do
+  dir=${i}
+  #imcrement i
+  #Make a directory for each KE cutoff. The -p flag, means no error if existsing
+  mkdir -p $dir
+  #Match line with cut_off_energy and all that follows and replace with the string
+  #you'd like, which here is the same but with a different cutoff.
+  #put into the folder created above
+  echo "generating param files for $i Cutoff Energy"
+  echo "copying relevant input files *.cell *.kptaux *.param *.trajaux *.xsd"
+  echo "into ./$dir/"
+  cp *.cell ./$dir/
+  cp *.kptaux ./$dir/
+  cp *.param ./$dir/
+  cp *.trjaux ./$dir/
+  cp *.xsd ./$dir/
+  echo "entering ./$dir/, editing cutoff energy appropriately and running ${seed}"
+  cd $dir
+  sed -i "s/cut_off_energy.*/cut_off_energy : $i/" $seed.param
+  mpirun -np 16 castep $seed
+  rm -fr $TMPDIR
+  cd ../
+  echo "returning to" `pwd`
+  i=`expr $i + 100`
+done
+
+echo "--- Done. It's `date`"
+

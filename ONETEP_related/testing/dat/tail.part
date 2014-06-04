@@ -1,0 +1,40 @@
+%block lattice_cart
+94.486315649999995      0.000000000000000       0.000000000000000       
+0.000000000000000       94.486315649999995      0.000000000000000       
+0.000000000000000       0.000000000000000       94.486315649999995      
+%endblock lattice_cart
+
+%block positions_abs
+Si1 46.07533116078049      47.28086987597119      46.05487245403928      
+H1 44.59597781391157      47.25182478254038      48.45068637092381      
+H1 44.24728551463682      46.95744321750124      43.93783096284850      
+H1 47.37610537107091      49.74089669297136      45.79250285274235      
+O1 48.26970025269922      45.06864287039461      46.03079734081166      
+H1 47.64724330246015      43.34383297273012      46.19550588625273      
+%endblock positions_abs
+
+
+%block species
+Si1 Si 14 9 9.0
+H1 H 1 1 9.0
+O1 O 8 4 9.0
+%endblock species
+
+%block species_atomic_set
+Si1 SOLVE
+H1 SOLVE
+O1 SOLVE
+%endblock species_atomic_set
+
+%block species_pot
+Si1 Si_00PBE_OP.recpot
+H1 H_00PBE_OP.recpot
+O1 O_00PBE_OP.recpot
+%endblock species_pot
+
+
+%block species_constraints
+Si1 NONE
+H1 NONE
+O1 NONE
+%endblock species_constraints

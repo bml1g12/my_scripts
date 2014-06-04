@@ -1,0 +1,32 @@
+#!/bin/bash --login
+
+# uncomment the following two lines if you need to debug this script
+# set -v      # Print script lines as they are read.
+# set -x      # Print commands and their arguments as they are executed.
+
+# PBS job options (name, compute nodes, job time)
+#PBS -N Dia2256
+#PBS -l select=4
+#PBS -l walltime=24:0:0
+
+# Replace [budget code] below with your project code (e.g. t01)
+#PBS -A e89-soto
+
+# Make sure any symbolic links are resolved to absolute path
+export PBS_O_WORKDIR=$(readlink -f $PBS_O_WORKDIR)
+
+# Change to the direcotry that the job was submitted from
+# (remember this should be on the /work filesystem)
+cd $PBS_O_WORKDIR
+
+# Set the number of threads to 3
+#   There are 3 OpenMP threads per MPI process
+export OMP_NUM_THREADS=6
+
+# Launch the parallel job
+#   Using 6*8 = 48 MPI processes
+#   8 MPI processes per node
+#   4 MPI processes per NUMA region
+#   3 OpenMP threads per MPI process
+aprun -n 16 -N 4 -S 2 -d 6 /work/e89/e89/vv1c12/ONETEP_3.5.9.6/devel/bin/onetep.archer nma_gas.dat > nma_gas.out 2> nma_gas.err
+

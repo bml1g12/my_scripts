@@ -1,0 +1,49 @@
+#!/bin/bash
+
+jobname=EXP015N
+rootname=h2o
+
+floor_d_OH_v=
+
+
+i=0
+while [ $i -le 100 ]
+do
+  echo "i is $i"
+  #Bash doesn't support floating point arithmetic (|bc) and neeed to escape asteric (\)
+  initial=0.97004
+  distance=$(echo $i \* 0.01 |bc) 
+  d_OH_v=$(echo $initial + $distance |bc)
+  #floor_d_OH_v=${d_OH_v/.*}
+  #echo Result of floor: $floor_d_OH_v  
+
+ 
+  dir=$i
+  echo "generating param files for step:$i, dir:$dir"
+  #Make a directory for each distance. The -p flag, means no error if existsing
+  mkdir -p $dir
+  
+  echo "editing d_OH_v" 
+  #replace the line and copy the result into the directory
+  sed "s/d\_OH\_v/$d_OH_v/" $rootname.nw > $dir/$rootname.nw
+  
+  echo "entering ./$dir/"
+  cd $dir
+  
+
+  #replace scratch dir in input file with the jobid
+  jobid=$jobname\_$(date +%N | sed -e 's/000$//' -e 's/^0//')
+  echo "Inserting jobid:$jobid as the scratch location"
+  sed -i "s#scratch_dir.*#scratch_dir /local/scratch/bml1g12/calculations/nwchem/scratch_files/$jobid#" $rootname.nw
+  echo "Job ID is $jobname\_$jobid and making scratch directory"
+  mkdir "/local/scratch/bml1g12/calculations/nwchem/scratch_files/$jobid"
+  sleep 1 
+  echo "--- Running nwchem in `pwd`. It's `date`"
+  mpirun -np 4 nwchem $rootname.nw &> $rootname.nwo
+  cd ../
+  echo "returning to" `pwd`
+  i=`expr $i + 1`
+  echo "i is $i"
+done
+touch "%DONE"
+echo "--- Done. It's `date`"

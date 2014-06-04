@@ -1,0 +1,43 @@
+#!/bin/bash
+
+#v1.2
+
+# determine onetep out file on which we are working on
+if [ $# -eq 0 ]; then
+  nouts=`ls *.out | wc -l | getcol 1`
+
+  if [ $nouts -ne 1 ]; then
+    echo "Which *.out file?" >&2
+    exit 101
+  else
+    f=`echo *.out`
+  fi
+else
+  if [ $# -eq 1 ]; then
+    f="$1"
+  fi
+fi  
+
+echo "Plotting RMS gradient from $f..." >&2
+
+#firstline=`grep -n "|ITER|" $f | tr ":" " " | getcol 1 | awk '{print $1+1}'`
+#lastline=`grep -n "\-\- CG" $f | tr ":" " " | getcol 1`
+
+#getlines $f $firstline $lastline | awk '{print $1, $2}' >\$rms
+
+# parse the intermediate gradients so that we don't have to wait for the final dump of convergence
+cat $f | grep "^RMS gradient" | getcol 4 | cat -n >\$rms
+
+# the last value, however, is only in this final dump, include it
+# recognize it by noticing <--, but not <<-- (used for trace in, trace out)
+# get rid of defect iteration markers, distinguished by "D I"
+cat $f | grep -E "[^<]<\-\-" | grep -v "D I" | getcols 1 2  >>\$rms
+
+gnuplot <<-END
+  set xtics 1
+  set ytics 1
+  set ylabel "log10 of RMS gradient"
+  set xlabel "NGWF CG iteration"
+  plot '\$rms' using (\$1):(log10(\$2)) with linespoints
+  pause 1000 "\n\n\nPausing indefinitely. Press Alt-tab, ^C to exit.\n\n\n"
+END

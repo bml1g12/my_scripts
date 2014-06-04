@@ -1,0 +1,34 @@
+#!/bin/bash
+
+if [ $# -ne 1 ] && [ $# -ne 2 ]; then
+  echo "Improper invocation. Try:" >&2
+  echo "killthese <pattern>" >&2
+  echo "or" >&2
+  echo "killthese -9 <pattern>" >&2
+  echo "The <pattern> will be passed to 'ps aux' and everything that matches will be killed." >&2
+  echo "Aborting!" >&2
+  exit 101
+fi
+
+if [ $# -eq 1 ]; then 
+  switch=""
+  pattern=$1
+else
+  switch=$1
+  pattern=$2
+fi
+
+echo "--- Killing these: ---"
+ps aux | grep $pattern | grep -v grep | grep -v killthese
+echo "-----------------------"
+ps aux | grep $pattern | grep -v grep | grep -v killthese | awk '{print $2}' | xargs kill $switch
+failed=$?
+echo 
+if [ $failed -ne 0 ]; then
+  echo "*** Something (or everything) went wrong ***" >&2
+  echo
+  exit 102
+else
+  echo "*** OK"
+  echo
+fi

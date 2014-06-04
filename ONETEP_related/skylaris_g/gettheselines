@@ -1,0 +1,53 @@
+#!/bin/bash
+#
+# Extracts the lines in a given range from a file
+# The numbers are 1-based. The lines are written to stdout.
+#
+# The numbers are supplied as a list 'line1 line2 line3', preceded by the name of the input file.
+# NB: The line ordering is *NOT* preserved, they will be output sorted!
+#     This, however, allows for just one pass through the input file.
+#     If duplicate line numbers are given, these will be output as duplicates.
+#
+# v1.00
+# 2009.12.18 Jacek Dziedzic, jaca@kdm.task.gda.pl
+
+if [ $# -lt 2 ]; then
+  echo "gettheselines: Improper invocation." >&2
+  echo "               Need at least two parameters -- the filename and at least one line number" >&2
+  exit 1
+fi
+
+filename=$1
+
+# Put them in a list
+let nlines="$#-1"
+for i in `seq 1 $nlines`; do
+  shift
+  linelist="$linelist $1"
+done
+
+# Sort them
+linelist=`echo $linelist | tr " " "\n" | sort -n`
+
+# Do some sanity checks
+firstline=`echo $linelist | tr " " "\n" | head -n 1`
+lastline=`echo $linelist | tr " " "\n" | tail -n 1`
+
+if [ $firstline -lt 1 ]; then
+  echo "gettheselines: Line numbers are 1-based You requested $firstline. Aborting." 2>&1
+  exit 101
+fi
+
+linecount=`wc -l $filename | awk '{print $1;}'`
+let "linecount++" # Allow for last line without terminating newline
+
+if [ $linecount -lt $lastline ]; then
+  echo "gettheselines: You requested line $lastline, while there are only $linecount lines in $filename. Aborting for your own good!" >&2
+  exit 102
+fi
+
+# Build an awk script to print the lines
+awkscript=`echo " $linelist" | tr "\n" " " | sed -r "s/ ([0-9]+)/NR==\1;/g"`
+awkscript="$awkscript"
+
+cat $filename | awk $awkscript

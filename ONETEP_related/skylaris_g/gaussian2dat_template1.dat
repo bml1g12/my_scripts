@@ -1,0 +1,49 @@
+
+ charge #CHARGE#
+
+ ngwf_threshold_orig : 0.000002
+ kernel_cutoff : 1000
+ elec_cg_max 0
+ occ_mix 1.0
+ xc_functional PBE
+
+ is_implicit_solvent F
+ is_include_cavitation F
+
+ ! Corrected for dis-rep contribution (hibeta)
+   is_solvent_surface_tension 0.0000133859 ha/bohr**2
+   is_solvation_beta 1.6
+   is_density_threshold 0.0004
+
+ is_bulk_permittivity 78.54
+ is_smeared_ion_rep T
+ is_smeared_ion_width 0.6
+ is_multigrid_nlevels 4
+ is_discretization_order 6
+ is_dielectric_model fix_initial
+
+ is_bc_coarseness 5
+
+ maxit_pen 0
+ maxit_ngwf_cg 25
+
+
+ output_detail VERBOSE
+ do_properties T
+ cube_format F
+ grd_format F
+ dx_format F
+ write_denskern T
+ write_tightbox_ngwfs T
+ write_density_plot F
+ lumo_dens_plot -1
+ homo_dens_plot -1
+
+ psinc_spacing 0.5 0.5 0.5
+
+ %block lattice_cart
+  40.5000000   0.0000000   0.0000000
+   0.0000000  40.5000000   0.0000000
+   0.0000000   0.0000000  40.5000000
+ %endblock lattice_cart
+

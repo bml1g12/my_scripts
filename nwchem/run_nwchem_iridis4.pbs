@@ -1,0 +1,58 @@
+#PBS -S /bin/bash
+#PBS -q batch
+#PBS -l nodes=1,tpn=6
+#PBS -A sky
+#PBS -l walltime=24:00:00
+#PBS -N EXP007N_SiOH
+## - To prevent other jobs from running on the same node: PBS -W "x=NACCESSPOLICY:SINGLEJOB"
+
+# Full path-and-filename of your ONETEP executable, adjust to your needs
+exe="/local/software/nwchem/6.3/intel-mkl-of2/bin/nwchem"
+
+cd $PBS_O_WORKDIR
+
+jobid=`echo ${PBS_JOBID} | cut -f1 -d.`
+mkdir "/scratch/bml1g12/nwchem/scratch_files/$jobid"
+
+echo "--- Running $exe in `pwd`. It's `date`"
+
+# First load the NWChem module
+module load nwchem/6.3/intel-mkl-of2
+
+# Invoke NWChem. mpirun is implicit in the nwchem startup script so
+# we don't need to include it here
+
+nwfiles=`ls *.nw | wc -l`
+
+if [ $nwfiles -eq 0 ]; then
+  echo "No .nw files in `pwd`. Aborting." >&2
+  exit 101
+fi
+
+if [ $nwfiles -gt 1 ]; then
+  echo "More than one nw file in `pwd`, don't know which one to choose. Aborting." >&2
+  exit 102
+fi
+
+rootname=`echo *.nw | sed -r "s/\.nw\$//"`
+
+if [ ! -x "$exe" ]; then
+  echo "$exe in `pwd` does not exist or is not executable. Aborting!"
+  exit 103
+fi
+
+module load openmpi/1.6.4/intel
+module unload intel/2013.4
+module load intel/mkl/2013.2
+module load intel/2013.2
+
+
+echo "Inserting jobid:$jobid as the scratch location"
+#replace scratch dir in input file with the jobid 
+sed -i "s#scratch_dir.*#scratch_dir /scratch/bml1g12/nwchem/scratch_files/$jobid#" $rootname.nw
+
+cp $rootname.nwo tmp.nwo
+mpirun -np 6 $exe $rootname.nw &> $rootname.nwo
+
+touch "%DONE"
+echo "--- Done. It's `date`"

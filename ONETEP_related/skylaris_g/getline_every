@@ -1,0 +1,13 @@
+#!/bin/bash
+
+if [ $# -eq 2 ]; then
+  name=/dev/stdin
+  num=$1
+  every=$2
+else
+  name="$1"
+  num=$2
+  every=$3
+fi
+
+cat $name | awk -v n=$num -v e=$every '{if((NR%e)==(n%e) && NR>=n) {print $0;}}'

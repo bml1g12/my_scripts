@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# Extracts the lines in a given range from a file
+# The numbers are 1-based. The lines are written to stdout.
+#
+# The numbers are supplied as a range 'first last'.
+#
+# Performance note: This head/tail technique is dead slow, but still
+#                   faster than 'sed -n "number p"'. For safety we also
+#                   perform 'wc -l' on the file, this makes it even slower
+#
+# v1.04
+# 2005.05,19 Jacek Dziedzic, jaca@kdm.task.gda.pl
+
+if [ $# -ne 3 ]; then
+  echo "getlines: Improper invocation." >&2
+  echo "          Need three parameters -- the filename and the numbers of the first and last line to extract." >&2
+  exit 1
+fi
+
+filename=$1
+start=$2
+finish=$3
+
+
+if [ $start -gt $finish ]; then
+  echo "getlines: Starting line number greater then last line number. No can do. Had: start=$start, finish=$finish" >&2
+  exit 1
+fi
+
+if [ $start -le 0 ]; then
+  echo "getlines: Line numbers are 1-based." 2>&1
+  exit 1
+fi
+
+linecount=`wc -l $filename | awk '{print $1;}'`
+
+let "linecount++" # Allow for last line without terminating newline
+
+if [ $linecount -lt $finish ]; then
+  echo "getlines: Warning: You requested line $finish, while there are only $linecount lines in $filename" >&2
+  echo "          Line numbers will be adjusted..." >&2
+  finish=$linecount
+fi
+
+let "count=$finish-$start+1"
+
+head $filename -n $finish | tail -n $count

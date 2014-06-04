@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# ars: This script calculates the distance between two atoms 
+#      provided an xyz file and the VMD indexes.
+#--------------------------------------------------
+# ars: Created by Alvaro Ruiz Serrano on 22/08/2011
+
+# ars: get args
+file=$1
+vmdindex1=$2
+vmdindex2=$3
+natoms=`head -n 1 $file`
+fileindex1=`echo $natoms $vmdindex1 | awk '{print $1-$2}'`
+fileindex2=`echo $natoms $vmdindex2 | awk '{print $1-$2}'`
+
+# ars: work with atoms in xyz file
+#      involves atoms (VMD index) vmdindex1 and vmdindex2
+#      which are in lines natoms-vmdindex1 and natoms-vmdindex2
+#      from the end of xyz file.
+
+# ars: get atom1
+line=`tail -n $fileindex1 $file | head -n 1`
+
+xa=`echo $line | awk '{print $2}'`
+ya=`echo $line | awk '{print $3}'`
+za=`echo $line | awk '{print $4}'`
+
+# ars: get atom2
+line=`tail -n $fileindex2 $file | head -n 1`
+
+xb=`echo $line | awk '{print $2}'`
+yb=`echo $line | awk '{print $3}'`
+zb=`echo $line | awk '{print $4}'`
+
+# ars: calculate H-bond 1
+dist=`echo $xa $ya $za $xb $yb $zb | awk '{print sqrt(($1-$4)*($1-$4) + ($2-$5)*($2-$5) + ($3-$6)*($3-$6))}'`
+
+echo $file: $dist " Ang"

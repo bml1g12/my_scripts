@@ -1,0 +1,33 @@
+#!/bin/bash
+
+mv status.log tmp.log
+touch status.log 
+
+echo "Batch script at `date`" > status.log
+
+for dir in acetic_acid1 ammonia methyl_ammonium_cation my1 nitrate_anion 2_methoxy_phenol1 zwitter_intra1;
+do
+ echo "dir is $dir"
+ cd $dir
+ rootname=`echo *.nw | sed -r "s/\.nw\$//"`
+ jobname=$rootname
+ jobid=$jobname\_$(date +%N | sed -e 's/000$//' -e 's/^0//')
+ echo "Inserting jobid:$jobid as the scratch location"
+ sed -i "s#scratch_dir.*#scratch_dir /local/scratch/bml1g12/calculations/nwchem/scratch_files/$jobid#" $rootname.nw
+ echo "Job ID is $jobname\_$jobid and making scratch directory"
+ mkdir "/local/scratch/bml1g12/calculations/nwchem/scratch_files/$jobid"
+ sleep 1 
+ echo "--- Running $rootname.nw in `pwd`. It's `date`" >> ../status.log
+ START=$(date +%s.%N) 
+ START_TIME=`date`
+ touch timing.log
+ #mpirun -np 4 nwchem $rootname.nw &> $rootname.nwo
+ echo "Complete. It's `date`" >> ../status.log
+ FIN_T=$(date +%s.%N) 
+ DIFF=$(echo "$FIN_T - $START" | bc)
+ echo "Wall Time Taken: $DIFF seconds" >> timing.log
+ hours_taken=$(echo "$DIFF / 3600" | bc -l)
+ printf "Or Wall Time Taken: %0.3f hours\n" $hours_taken >> timing.log
+ cd ..
+done
+echo "--- Done. It's `date`"

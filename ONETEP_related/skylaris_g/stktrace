@@ -1,0 +1,59 @@
+#!/bin/bash
+
+# ----------------------------------------------
+ensure_existence() {
+  which $testf >/dev/null 2>/dev/null; result=$?
+  if [ $result -eq 1 ]; then
+    echo "Cannot locate '$testf' (a required dependency) in the PATH. Please fix this." >&2
+    exit 2
+  fi
+}
+
+# ----------------------------------------------
+# main:
+# ----------------------------------------------
+
+if [ $# -gt 2 ] || [ $# -eq 0 ]; then
+  echo "Improper invocation. Try:" >&2
+  echo "stktrace <executable_file> <stack_trace_file>" >&2
+  echo "or" >&2
+  echo "cat <stack_trace_file> | stktrace <executable_file>" >&2
+  exit 1
+fi
+
+myroot=`dirname $0`
+PATH=$PATH:.:$myroot # Allow for the auxiliary scripts to be put in current dir or where the script resides or in PATH.
+testf="symbol_by_address"; ensure_existence;
+
+exefile=$1
+
+if [ $# -eq 2 ]; then
+  stacktracefile=$2
+else
+  stacktracefile="/dev/stdin"
+fi
+
+tmpfile=/dev/shm/stktrace.tmp
+
+# Make a copy in case input is a stream
+cp $stacktracefile $tmpfile
+
+echo "--- Analysis 1 ---"
+
+cat $tmpfile | awk -v stacktracefile=$stacktracefile -v exefile=$exefile '
+{
+  if($2 ~ "00") {
+    system("symbol_by_address "$2" "exefile)
+  }
+}'
+
+echo -e "\n--- Analysis 2 ---"
+
+cat $tmpfile | awk -v stacktracefile=$stacktracefile -v exefile=$exefile '
+{
+  if($2 ~ "00") {
+    system("addr2line "$2" -e "exefile)
+  }
+}'
+
+rm -f $tmpfile

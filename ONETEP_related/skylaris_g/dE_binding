@@ -1,0 +1,66 @@
+#!/bin/bash
+
+outunit="energy_kcal_per_mol"
+#outunit="energy_kJ_per_mol"
+#outunit="energy_au"
+
+if [ $# -ne 3 ]; then
+  echo "Improper invocation. Supply three parameters that are the names of onetep .out files for: complex, host, ligand." >&2
+  exit 1
+fi
+
+cplx="$1"
+host="$2"
+lign="$3"
+
+if [ ! -r $cplx ]; then
+  echo "$cplx does not exist, aborting!" >&2
+  exit 2
+fi
+if [ ! -r $host ]; then
+  echo "$host does not exist, aborting!" >&2
+  exit 3
+fi
+if [ ! -r $lign ]; then
+  echo "$lign does not exist, aborting!" >&2
+  exit 4
+fi
+
+if [ `getenergy >/dev/null; echo $?` != 101 ]; then
+  echo "getenergy not found in \$PATH. Aborting!" >&2
+  exit 11
+fi
+if [ `unitconv >/dev/null; echo $?` != 101 ]; then
+  echo "unitconv not found in \$PATH. Aborting!" >&2
+  exit 12
+fi
+
+
+echo "Complex: $cplx"
+echo "Host:    $host"
+echo "Ligand:  $lign"
+echo "Output unit $outunit"
+
+n=0
+for type in total kinetic psloc psnl hartree xc ionion ewald dispersion smearedself smearednonself cavitation; do
+  echo "          -----------Energy difference in $type----------"
+  Ecplx=`getenergy $cplx $type | unitconv energy_au $outunit /dev/stdin 2>/dev/null`
+  Ehost=`getenergy $host $type | unitconv energy_au $outunit /dev/stdin 2>/dev/null`
+  Elign=`getenergy $lign $type | unitconv energy_au $outunit /dev/stdin 2>/dev/null`
+  absentin=""
+  if [ -z "$Ecplx" ]; then
+    absentin=" in complex"
+  fi
+  if [ -z "$Ehost" ]; then
+    absentin="$absentin in host"
+  fi
+  if [ -z "$Elign" ]; then
+    absentin="$absentin in ligand"
+  fi
+  if [ ! -z "$absentin" ]; then
+    echo "          *** Energy term absent$absentin"
+  else
+    echo $Ecplx $Ehost $Elign | awk 'BEGIN{printf("       complex           host         ligand  (host+ligand)     dG_binding\n")} {printf("%14.4f %14.4f %14.4f %14.4f %14.4f\n",$1,$2,$3,$2+$3,$1-$2-$3)}'
+  fi
+  [ $n -eq 0 ] && echo && let "n++"
+done

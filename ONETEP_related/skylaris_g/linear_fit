@@ -1,0 +1,76 @@
+#!/bin/bash
+
+##########################################################################
+# Calculates a least-squares fit of f(x)=ax+b to XY, 2-column data.
+# Returns a, b and the regression coefficient.
+# v1.00
+##########################################################################
+# 2011.10.27 Jacek Dziedzic, jack.erede@gmail.com
+
+# ----------------------------------------------
+abort() {
+  echo "Aborting!" >&2
+  exit 1
+}
+
+# ----------------------------------------------
+# main() 
+# ----------------------------------------------
+if [ $# -ne 1 ]; then
+  echo "Improper invocation. Supply one parameter -- the name of a two-column datafile." >&2
+  abort
+fi
+
+f=$1
+
+if [ ! -r $f ]; then
+  echo "$f does not exist or is unreadable." >&2
+  abort
+fi
+
+ndata=`wc -l $f | getcol 1`
+
+if [ $ndata -lt 2 ]; then
+  echo "Need at least two datapoints." >&2
+  abort
+fi
+
+a_b_xavg_yavg=`cat $f | awk '
+{
+  xavg+=$1;
+  yavg+=$2;
+  xyavg+=$1*$2;
+  x2avg+=$1*$1;
+  N++;
+}
+END {
+  xavg/=N;
+  yavg/=N;
+  xyavg/=N;
+  x2avg/=N;
+  
+  a=(xyavg-xavg*yavg)/(x2avg-xavg*xavg);
+  b=yavg-a*xavg;
+  
+  printf("%.12e %.12e\n %.12e %.12e\n",a,b,xavg,yavg);
+}
+'`
+
+a=`echo $a_b_xavg_yavg | getcol 1`
+b=`echo $a_b_xavg_yavg | getcol 2`
+xavg=`echo $a_b_xavg_yavg | getcol 3`
+yavg=`echo $a_b_xavg_yavg | getcol 4`
+
+cat $f | awk -v a=$a -v b=$b -v xavg=$xavg -v yavg=$yavg '
+{
+  num+=($1-xavg)*($2-yavg);
+  den1+=($1-xavg)*($1-xavg);
+  den2+=($2-yavg)*($2-yavg);
+}
+END {
+  r=num/sqrt(den1*den2);
+  printf("a: %.12e\n",a);
+  printf("b: %.12e\n",b);
+  printf("r: %.12e\n",r);
+}
+'

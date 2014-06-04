@@ -1,0 +1,20 @@
+bz2_current.sh #zip current directory and not its subfolders in to bz2 format
+castep_print_geom_convergence.sh #print converegence of CASTEP files to .csv file
+clean_castep.sh #delete files unneccisary for a CASTEP restart
+collate_energy.sh #collect the Total Energy for all castep subfolders
+collate_esp.sh #collect the electrostatic potential from all castep subfolders
+collate_forces.sh #collect the forces from all castep subfolders 
+energy.pl #find the energy from a castep file
+force.pl #find the force from a castep file
+onetep_fix_ms_dat.sh # change default material studio settings a ONETEP .dat file
+onetep_print_geom_convergence.sh # print the onetep file convergence
+pot  
+pot.exe
+pot.f90 #fortran script which can extract the electrostatic potential from the .cst_esp files produced from CASTEP runs in line averages and possibly a 3D .fmt file. MUST BE compiled with bigendian style numbering flag.
+psuedopotential_path.sh #changes the path fo the pseudopotential in a castep .cell file to that provided
+run_castep_ecutoff #will run single point energy tests using a range of different energy cutoffs. A more efficient way is on the CASTEP geometry optimisation guide on their website, whereby you hack the automated basis set correction to do this for you.
+run_castep_kpoint_scan #will run single point energy calclations at a range of k-points
+run_castep_openmpi #example .pbs script to automatically detect and run castep files in the currrent directory
+script_testing
+sed_for_test.sh 
+stress.pl #calculated stress in castep file

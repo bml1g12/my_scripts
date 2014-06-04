@@ -1,0 +1,44 @@
+#!/bin/bash
+
+if [ $# -ne 2 ]; then
+  echo "Improper invocation. Supply a hex address and the name of the executable." >&2
+  exit 1
+fi
+
+hex_addr=`echo $1 | sed "s/0x//"` # Accept addresses with or without "0x"
+exefile=$2
+
+nm $exefile | awk -v hex_addr=$hex_addr '
+function hex2dec(x) {
+  return strtonum("0x"x)
+}
+function dec2hex(x) {
+  return sprintf("%x",x)
+}
+
+BEGIN {
+  dec_addr=hex2dec(hex_addr)
+  min_delta=99999999999
+}
+
+{
+  hex_addr_here=$1
+  dec_addr_here=hex2dec(hex_addr_here)
+  delta=dec_addr-dec_addr_here
+  if(delta<0) next
+  if(delta < min_delta) {
+    min_delta=delta
+    base_hex_addr=dec2hex(dec_addr_here)
+    symbol=$3
+  }
+}
+
+END {
+  if(min_delta < 1048576) {
+    printf("0x%s %s %s %s0x%s%s 0x%s\n",hex_addr,"->",symbol," (",base_hex_addr,") +",dec2hex(min_delta))
+  }
+  else {
+    printf("0x%s %s\n",hex_addr,"-> ???")
+  }
+}
+'

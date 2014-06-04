@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Adjust 'mountwhere' to point to an empty, existing directory on your local filesystem
+# which is *not* in your home directory (somewhere in /local/scratch is good, like in
+# my example).
+
+user=`whoami`
+mountwhere=/local/scratch/$user/Mnt/filestore
+
+if [ -d "$mountwhere" ]; then
+  sshfs -oworkaround=rename $user@ssh.soton.ac.uk:/research/skylaris $mountwhere
+else
+  echo "No can do: $mountwhere does not exist or is not a directory." >&2
+fi

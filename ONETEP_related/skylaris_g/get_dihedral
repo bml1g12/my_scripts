@@ -1,0 +1,98 @@
+#!/bin/bash
+
+# ars: This script calculates the angle between three atoms
+#      provided an xyz file and the VMD indexes.
+#--------------------------------------------------
+# ars: Created by Alvaro Ruiz Serrano on 22/08/2011
+
+# ars: get args
+file=$1
+vmdindex1=$2
+vmdindex2=$3 # central!
+vmdindex3=$4 # central!
+vmdindex4=$5
+natoms=`head -n 1 $file`
+fileindex1=`echo $natoms $vmdindex1 | awk '{print $1-$2}'`
+fileindex2=`echo $natoms $vmdindex2 | awk '{print $1-$2}'`
+fileindex3=`echo $natoms $vmdindex3 | awk '{print $1-$2}'`
+fileindex4=`echo $natoms $vmdindex4 | awk '{print $1-$2}'`
+
+# ars: work with atoms in xyz file
+#      involves atoms (VMD index) vmdindex1, vmdindex2, vmdindex3 and vmdindex4
+#      which are in lines natoms-vmdindex1, natoms-vmdindex2, natoms-vmdindex3 and 
+#      natoms-vmdindex34 from the end of xyz file.
+
+# ars: get atom1
+line=`tail -n $fileindex1 $file | head -n 1`
+xa=`echo $line | awk '{print $2}'`
+ya=`echo $line | awk '{print $3}'`
+za=`echo $line | awk '{print $4}'`
+
+# ars: get atom2
+line=`tail -n $fileindex2 $file | head -n 1`
+xb=`echo $line | awk '{print $2}'`
+yb=`echo $line | awk '{print $3}'`
+zb=`echo $line | awk '{print $4}'`
+
+# ars: get atom3
+line=`tail -n $fileindex3 $file | head -n 1`
+xc=`echo $line | awk '{print $2}'`
+yc=`echo $line | awk '{print $3}'`
+zc=`echo $line | awk '{print $4}'`
+
+# ars: get atom4
+line=`tail -n $fileindex4 $file | head -n 1`
+xd=`echo $line | awk '{print $2}'`
+yd=`echo $line | awk '{print $3}'`
+zd=`echo $line | awk '{print $4}'`
+#----------------------------------------------------------------
+
+
+# ars: calculate A-B
+xab=`echo $xa $xb | awk '{print $1-$2}'`
+yab=`echo $ya $yb | awk '{print $1-$2}'`
+zab=`echo $za $zb | awk '{print $1-$2}'`
+
+# ars: calculate B-C
+xbc=`echo $xb $xc | awk '{print $1-$2}'`
+ybc=`echo $yb $yc | awk '{print $1-$2}'`
+zbc=`echo $zb $zc | awk '{print $1-$2}'`
+
+# ars: calculate C-D
+xcd=`echo $xc $xd | awk '{print $1-$2}'`
+ycd=`echo $yc $yd | awk '{print $1-$2}'`
+zcd=`echo $zc $zd | awk '{print $1-$2}'`
+
+#----------------------------------------------------------------
+# ars: calculate normal vector to plane 1, defined by vectors AB and -BC
+
+# ars: calculate n1= -AB x BC
+xn1=`echo $yab $zab $ybc $zbc | awk '{print -$1*$4 + $2*$3}'`
+yn1=`echo $xab $zab $xbc $zbc | awk '{print  $1*$4 - $2*$3}'`
+zn1=`echo $xab $yab $xbc $ybc | awk '{print -$1*$4 + $2*$3}'`
+
+#----------------------------------------------------------------
+# ars: calculate normal vector to plane 2, defined by vectors BC and -CD
+
+# ars: calculate n2= -BC x CD
+xn2=`echo $ybc $zbc $ycd $zcd | awk '{print -$1*$4 + $2*$3}'`
+yn2=`echo $xbc $zbc $xcd $zcd | awk '{print  $1*$4 - $2*$3}'`
+zn2=`echo $xbc $ybc $xcd $ycd | awk '{print -$1*$4 + $2*$3}'`
+
+#----------------------------------------------------------------
+
+
+# ars: calculate (n1)_dot_(n2)
+n1_dot_n2=`echo $xn1 $yn1 $zn1 $xn2 $yn2 $zn2 | awk '{print $1*$4+$2*$5+$3*$6}'`
+
+# ars: calculate |n1|*|n2|
+n1_times_n2=`echo $xn1 $yn1 $zn1 $xn2 $yn2 $zn2 | awk '{print sqrt($1*$1 + $2*$2 + $3*$3)* sqrt($4*$4 + $5*$5 + $6*$6)}'`
+
+#----------------------------------------------------------------
+# ars: calculate cos_theta
+cos_theta=`echo $n1_dot_n2 $n1_times_n2 | awk '{print $1/$2}'`
+# ars: calculate theta (NOTE: adapted to return the same result than VMD)
+theta=`echo $cos_theta | awk '{print atan2(sqrt(1-$1*$1)/$1,1)*360/(2*3.14159)}
+'`
+
+echo $file: $theta " deg"

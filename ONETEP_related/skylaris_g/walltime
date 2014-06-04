@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# v1.3
+
+files=`find . -name "*.out"`
+
+rm -f \$tmp
+
+for f in $files; do
+  anyfiles=1
+  lastiter=`cat $f | grep "CG iteration" | grep -v "CG iterations" | tail -n 1 | getcol 5`
+  if [ -z "$lastiter" ]; then
+    lastiter=0
+  else
+    # Strip any leading zeros from lastiter, or 'let' can get confused interpreting these as a base change
+    lastiter=`echo $lastiter | sed -r "s/^0*//"`
+  fi
+  ferr=`echo $f | sed "s/\.out/.err/"`
+  t=`tail -n 500 $f | grep -a "TOTAL TIME" | getcol 3 | tr "s" " " | awk '{print $1/3600.0}'`
+  breakage="(completed)"
+  if [ -z "$t" ]; then
+    # Failed to obtain total time from outfile, job did not complete
+    if [ -s "$ferr" ]; then # nonzero err file exists
+      breakage="(crashed/killed)"
+      terminatedfile="$ferr"
+      let "lastiter--"
+    else
+      breakage="(and_running)"
+      terminatedfile="$f"
+      let "lastiter--"
+    fi
+    startdate=`head -n 1000 $f | grep "Job started" | sed -e "s/Job started://" -e "s/(.*//"` # extract start date from out file
+    startdate=`echo $startdate | sed -r -e "s/^ //" -e "s/ \$//"` # strip leading and trailing blanks
+    startdate=`echo $startdate | sed -r "s/^([0-9][0-9])-([0-9][0-9])-([0-9][0-9][0-9][0-9])/\3-\2-\1/"` # convert dd-mm-yyyy to yyyy-mm-dd
+    startdate=`date -d "$startdate" +%s` # convert do seconds from epoch
+    terminateddate=`stat $terminatedfile | grep "Modify" | sed "s/Modify://"` # mtime of the err file
+    terminateddate=`date -d "$terminateddate" +%s`
+    t=`echo $terminateddate $startdate | awk '{print ($1-$2)/3600.}'`
+  fi
+    echo $f $t $breakage "($lastiter iterations completed)" >>\$tmp
+done
+
+echo
+
+if [ ! -z "$anyfiles" ]; then
+  cat \$tmp | sort
+  cat \$tmp | awk '{sum=sum+$2} END{print "----------------------------------------------\nTOTAL TIME: ",sum}'
+  rm -f \$tmp
+else
+  echo "Nothing to do."
+fi

@@ -1,0 +1,92 @@
+#!/bin/bash
+
+# by Jacek Dziedzic, 16/06/2010
+# v2.0, 23/08/2010
+
+elements="H He Li Be B C N O F Na Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Uut Uuq Uup UUh Uus Uuo"
+
+abort() {
+  echo "Aborting!" >&2
+  exit 1
+}
+
+if [ $# -ne 1 ] && [ $# -ne 4 ] ; then
+  echo "Improper invocation. Supply the Gaussian input file to be converted, optionally followed by three shifts in bohr." >&2
+  abort
+fi
+
+f=$1
+xshift=0.0
+yshift=0.0
+zshift=0.0
+
+if [ $# -gt 1 ]; then
+  xshift=$2
+  yshift=$3
+  zshift=$4
+  echo "Applying a shift of [$xshift,$yshift,$zshift]..." >&2
+else
+  echo "No shift will be applied. Make sure yer coordinates are all non-negative!" >&2
+fi
+
+
+echo "Parsing $f..."
+if [ ! -r $f ]; then
+  echo "$f missing or unreadable." >&2
+  abort
+fi
+
+q=`cat $f | awk 'NR==7' | awk '{print $1}'`
+
+isneutral=`echo $q | awk '{if($1==0) print 1; else print 0;}'`
+
+if [ ! "$isneutral" == "1" ]; then
+  echo "WARNING: System is not neutral. Adjusting charge." >&2
+fi
+
+firstline=8
+lastline=`tail -n +$firstline $f | grep -En "^$" | tr ":" " " | awk 'NR==1' | awk -v firstline=$firstline '{print $1+firstline-2}'`
+
+echo "I *think* the coordinates are on lines: $firstline - $lastline..." >&2
+echo ""
+
+fout=`echo $f | sed "s/\..*\$/.dat/"`
+
+cat gaussian2dat_template1.dat | sed -e "s/#CHARGE#/$q/" > $fout
+
+echo "! by gaussian2dat, from $f" >>$fout
+
+rm -f tmp
+cat $f | awk -v firstline=$firstline lastline=$lastline 'NR>=firstline && NR<=lastline' | awk -v elements="$elements" -v xshift=$xshift -v yshift=$yshift -v zshift=$zshift -v q=$q -v fout=$fout \
+'BEGIN{
+   split(elements,elements_arr," ");
+   print(" %block positions_abs") >> fout
+ }
+ {
+   conv=1.0/0.529177
+   el=elements_arr[$1]
+   print el >> "tmp"
+   x=$2*conv+xshift; y=$3*conv+yshift; z=$4*conv+zshift
+   printf("%-3s %14.8f %14.8f %14.8f\n",el,x,y,z) >> fout
+ }
+ END{
+   print(" %endblock positions_abs") >> fout
+ }
+'
+
+cat tmp | sort | uniq >tmp2 && rm -f tmp
+# tmp2 now contains the names of all the species that were present
+
+# Now cat template2, picking only the species that were present
+n=`cat gaussian2dat_template2.dat | wc -l | awk '{print $1}'`
+for n in `seq 1 $n`; do
+  line=`cat gaussian2dat_template2.dat | awk -n=$n 'NR==n'`
+  sought=`echo $line | awk '{print $1}'`
+  if [ "$sought" == "%block" ] || [ "$sought" == "%endblock" ] || [ -z "$sought" ]; then # copy these over unchanged
+    echo $line >> $fout
+  else # Otherwise look for a match in tmp2
+    cat tmp2 | awk -v sought=$sought -v line="$line" '{if($1 == sought) print line}' >> $fout
+  fi
+done
+
+rm -f tmp2

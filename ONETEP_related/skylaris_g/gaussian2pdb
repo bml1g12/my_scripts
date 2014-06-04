@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# by Jacek Dziedzic, 24/08/2010
+
+elements="H He Li Be B C N O F Na Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Uut Uuq Uup UUh Uus Uuo"
+
+abort() {
+  echo "Aborting!" >&2
+  exit 1
+}
+
+if [ $# -ne 1 ] && [ $# -ne 4 ] ; then
+  echo "Improper invocation. Supply the Gaussian input file to be converted, optionally followed by three shifts in bohr." >&2
+  abort
+fi
+
+f=$1
+xshift=0.0
+yshift=0.0
+zshift=0.0
+
+if [ $# -gt 1 ]; then
+  xshift=$2
+  yshift=$3
+  zshift=$4
+  echo "Applying a shift of [$xshift,$yshift,$zshift] (bohr)..." >&2
+else
+  echo "No shift will be applied." >&2
+fi
+
+
+echo "Parsing $f..."
+if [ ! -r $f ]; then
+  echo "$f missing or unreadable." >&2
+  abort
+fi
+
+fout=`echo $f | sed "s/\..*\$/.pdb/"`
+
+echo "REMARK  98 Produced by gaussian2pdb, from $f" | cut -c 1-80 >$fout
+
+q=`cat $f | awk 'NR==7' | awk '{print $1}'`
+
+isneutral=`echo $q | awk '{if($1==0) print 1; else print 0;}'`
+
+if [ ! "$isneutral" == "1" ]; then
+  echo "WARNING: System is not neutral. Storing the charge in a REMARK line." >&2
+  echo "REMARK  99 CHARGE: $q" >>$fout
+fi
+
+firstline=8
+lastline=`tail -n +$firstline $f | grep -En "^$" | tr ":" " " | awk 'NR==1' | awk -v firstline=$firstline '{print $1+firstline-2}'`
+
+echo "I *think* the coordinates are on lines: $firstline - $lastline..." >&2
+echo ""
+
+
+cat $f | awk -v firstline=$firstline lastline=$lastline 'NR>=firstline && NR<=lastline' | awk -v elements="$elements" -v xshift=$xshift -v yshift=$yshift -v zshift=$zshift -v q=$q -v fout=$fout \
+'BEGIN{
+   split(elements,elements_arr," ");
+ }
+ {
+   # conv=1.0/0.529177
+   conv=1.0;
+   el=elements_arr[$1]
+   x=$2*conv+xshift; y=$3*conv+yshift; z=$4*conv+zshift
+   printf("ATOM %6d  %-2s  XXX     1     %7.3f %7.3f %7.3f\n",++n,el,x,y,z) >>fout
+ }
+'

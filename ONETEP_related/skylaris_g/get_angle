@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# ars: This script calculates the angle between three atoms
+#      provided an xyz file and the VMD indexes.
+#--------------------------------------------------
+# ars: Created by Alvaro Ruiz Serrano on 22/08/2011
+
+# ars: get args
+file=$1
+vmdindex1=$2
+vmdindex2=$3 # central!
+vmdindex3=$4
+natoms=`head -n 1 $file`
+fileindex1=`echo $natoms $vmdindex1 | awk '{print $1-$2}'`
+fileindex2=`echo $natoms $vmdindex2 | awk '{print $1-$2}'`
+fileindex3=`echo $natoms $vmdindex3 | awk '{print $1-$2}'`
+
+
+# ars: work with atoms in xyz file
+#      involves atoms (VMD index) vmdindex1, vmdindex2 and vmdindex3
+#      which are in lines natoms-vmdindex1, natoms-vmdindex2 and 
+#      natoms-vmdindex3 from the end of xyz file.
+
+# ars: get atom1
+line=`tail -n $fileindex1 $file | head -n 1`
+xa=`echo $line | awk '{print $2}'`
+ya=`echo $line | awk '{print $3}'`
+za=`echo $line | awk '{print $4}'`
+
+# ars: get atom2
+line=`tail -n $fileindex2 $file | head -n 1`
+xb=`echo $line | awk '{print $2}'`
+yb=`echo $line | awk '{print $3}'`
+zb=`echo $line | awk '{print $4}'`
+
+# ars: get atom3
+line=`tail -n $fileindex3 $file | head -n 1`
+xc=`echo $line | awk '{print $2}'`
+yc=`echo $line | awk '{print $3}'`
+zc=`echo $line | awk '{print $4}'`
+
+# ars: calculate B-A
+xba=`echo $xb $xa | awk '{print $1-$2}'`
+yba=`echo $yb $ya | awk '{print $1-$2}'`
+zba=`echo $zb $za | awk '{print $1-$2}'`
+
+# ars: calculate B-C
+xbc=`echo $xb $xc | awk '{print $1-$2}'`
+ybc=`echo $yb $yc | awk '{print $1-$2}'`
+zbc=`echo $zb $zc | awk '{print $1-$2}'`
+
+
+# ars: calculate (B-A)_dot_(B-C)
+ba_dot_bc=`echo $xba $yba $zba $xbc $ybc $zbc | awk '{print $1*$4+$2*$5+$3*$6}'`
+
+# ars: calculate |B-A|*|B-C|
+ba_times_bc=`echo $xba $yba $zba $xbc $ybc $zbc | awk '{print sqrt($1*$1 + $2*$2 + $3*$3)* sqrt($4*$4 + $5*$5 + $6*$6)}'`
+
+
+# ars: calculate cosB
+cosB=`echo $ba_dot_bc $ba_times_bc | awk '{print $1/$2}'`
+# ars: calculate theta_B
+thetaB=`echo $cosB | awk '{$2=atan2(sqrt(1-$1*$1)/$1,1)*360/(2*3.14159)} END{if($2<0) print $2+180 ; if($2>0) print $2}'`
+
+echo $file: $thetaB " deg"

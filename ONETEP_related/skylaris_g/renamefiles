@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# ars: This script renames a bunch of files.
+#--------------------------------------------------
+# ars: Created by Alvaro Ruiz Serrano on 24/08/2011
+
+oldpattern=$1
+newpattern=$2
+
+for file in *${oldpattern}* ; do newfile=`echo $file | sed "s/${oldpattern}/${newpattern}/"` ; mv $file $newfile ; done

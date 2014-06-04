@@ -1,0 +1,517 @@
+#!/bin/bash
+
+#######################################################
+# Fancy PBS info on queued jobs.
+#######################################################
+# 2011.05.23 by Jacek Dziedzic, jack.erede@gmail.com.
+# v1.40
+#######################################################
+mincols=115
+rednodememory=24000000000 # Adjust this if the red nodes ever get more than 24gb
+
+# v1.24 -- bugfix for a situation where there are no queued jobs whatsoever
+# v1.25 -- singlejob attribute specified with -l and in lowercase also detected
+# v1.28 -- -b ignores blocked jobs
+# v1.29 -- Adds 'HELD' status
+# v1.30 -- Adds 'INIT' status for jobs that are just starting
+# v1.31 -- Adds 'DFRD' status for deferred jobs
+# v1.32 -- -V added
+# v1.33 -- Works fine with 7 digit job numbers
+# v1.34 -- Uses "???" for PATH if it could not be obtained
+# v1.35 -- PATH works even with new Moab, where PBS_QUEUE migrated to the top
+# v1.36 -- Shows "???" as number of nodes if tpn misused
+# v1.37 -- Shows "NONE" as remaining time if job exceeded walltime
+# v1.38 -- Works correctly with no jobs whatsoever
+# v1.39 -- Updated for the new checkjob which displays an extra attribute: "BecameEligible"
+# v1.40 -- -c ignores done (completed) jobs.
+
+function checkcolumns() {
+  if [ -z "$COLUMNS" ]; then
+    columns=`tput cols`
+  else
+    columns=$COLUMNS
+  fi
+
+  if [ "$columns" -lt "$mincols" ]; then
+    echo "Your display is too narrow ($columns columns)." >&2
+    echo "At least $mincols columns are needed. Aborting." >&2
+    exit 2
+  fi
+}
+
+function help() {
+  echo
+  echo `head $0 | grep -E "^# " | sed "s/#//"`
+  echo
+  echo "The following options are supported: "
+  echo "  -h          shows help"
+  echo "  -b          ignores blocked jobs"
+  echo "  -c          ignores completed jobs"
+  echo 
+  echo "The following fields are displayed:"
+  echo "  PBS ID   -- PBS job identifier,"
+  echo "              Enhanced service (gold) have IDs in yellow."
+  echo "  POS      -- position in the idle queue,"
+  echo "              Running jobs display 'RUNS' instead."
+  echo "              Jobs just starting display 'INIT' instead."
+  echo "              Blocked jobs display 'BLKD' in red instead."
+  echo "              Deferred jobs display 'DFRD' in red instead."
+  echo "              Held jobs display 'HELD' instead."
+  echo "              Jobs whose nodes look uncontactable display 'HMMM' in red instead."
+  echo "              This might be temporary (just after they start)."
+  echo "              If it persits, it's likely nodes are down and the job is dead."
+  echo "  NAME     -- the job name,"
+  echo "              Jobs that violate policies have names in red."
+  echo "  NODES    -- the number of nodes requested,"
+  echo "              This correctly does the counterintuitive when tpn is used."
+  echo "              Jobs with exclusive access to nodes have this field in yellow."
+  echo "  CORES    -- the total number of cores requested,"
+  echo "  MEMORY   -- the total memory requested,"
+  echo "              '*' indicates default (grey colour is also used)."
+  echo "              'P' indicates pmem (mem per core) was specified."
+  echo "              orange colour indicates orange node required."
+  echo "  REQ'D    -- the total wall time required (hh:mm),"
+  echo "  USED     -- the wall time used already."
+  echo "  REMAIN   -- the wall time remaining."
+  echo "  ST       -- job state (R-running, Q-queued, C-completed, H-held)."
+  echo "  XFA      -- X-factor."
+  echo "  PRIORITY -- priority accumulated so far."
+  echo "              (Running) if job is running (and thus has no notion of priority)."
+  echo "              (Blocked?) if job looks blocked or held (has no priority either)."
+  echo "              (Completed) if job has completed (has no priority either)."
+  echo "  RESERVATION -- current reservation (estimated start time) (dd:hh:mm:ss),"
+  echo "                 Running jobs have negative values."
+  echo "  PATH        -- path where the job runs,"
+  echo "                 Long paths will be shortened by truncating at the front."
+  echo
+  exit
+}
+
+#########################################################
+# main() 
+#########################################################
+
+
+# help?
+if [ "$1" == "-h" ] || [ "$1" == "-?" ] || [ "$1" == "--help" ]; then
+  help
+fi
+
+# version query?
+if [ "$1" == "-V" ] || [ "$1" == "--version" ]; then
+  banner="\033[1;37mqq `head $0 | grep '# v' | sed 's/# //'`\033[m"
+  echo -e $banner
+  exit 98
+fi
+
+# Defaults for options
+verbose=0
+ignoreblocked=0
+ignoredone=0
+
+# Parse options
+while getopts "bvc" flag; do
+  if [ "$flag" == "?" ]; then
+    echo "Improper invocation. " >&2
+    help
+  fi
+
+  if [ "$flag" == "v" ]; then verbose=1; fi
+  if [ "$flag" == "b" ]; then ignoreblocked=1; fi
+  if [ "$flag" == "c" ]; then ignoredone=1; fi
+done
+
+checkcolumns
+
+blockedcounter=0
+donecounter=0
+
+echo -n "."
+user=`whoami`
+echo -n "."
+datafile=/tmp/qq.$user
+rm -f $datafile.done
+
+IFSBAK=$IFS
+IFS=""
+
+if [ "$1" == "-v" ]; then
+  verbose=1
+else
+  verbose=0
+fi
+
+# qstat for basic info
+q=`qstat -u $user`
+echo -n "."
+
+liststart=`echo $q | grep -n "\-\-\-\-\-\-\-" | tr ":" " " | awk '{print $1+1}'`; echo -n "."
+
+if [ -z "$liststart" ]; then
+  liststart=0
+fi
+
+myjobnos=`echo $q | tail -n +$liststart | tr "." " " | awk '{print $1}' | tr "\n" " "`; echo -n "."
+myjobnames=`echo $q | tail -n +$liststart | awk '{print $4}' | tr "\n" " "`; echo -n "."
+myjobnnodes=`echo $q | tail -n +$liststart | awk '{print $6}' | tr "\n" " "`; echo -n "."
+myjobmemreqs=`echo $q | tail -n +$liststart | awk '{print $8}' | tr "\n" " "`; echo -n "."
+myjobtimereqs=`echo $q | tail -n +$liststart | awk '{print $9}' | tr "\n" " "`; echo -n "."
+myjobtimeelaps=`echo $q | tail -n +$liststart | awk '{print $11}' | tr "\n" " "`; echo -n "."
+myjobstates=`echo $q | tail -n +$liststart | awk '{print $10}' | tr "\n" " "`; echo -n "o"
+
+# showq -i, showq -r for more info
+showqi=`showq -i | tr "*+\-_" " "` # tr clears suffixes to job numbers
+if [ -z "$showqi" ]; then # cannot use $? because tr shadows it
+  echo "showq failed. Aborting." >&2
+  exit 1
+fi
+echo -n "o"
+
+showqr=`showq -r | tr "*+\-_" " "`
+if [ -z "$showqi" ]; then  # cannot use $? because tr shadows it
+  echo "showq failed. Aborting." >&2
+  exit 1
+fi
+echo "o"
+
+IFS=" "
+
+# Column header
+echo -e "\033[1;32m PBS ID  POS            NAME NODES CORES MEMORY  REQ'D   USED REMAIN ELIGIBLE ST XFA    PRIORITY  RESERVATION PATH\033[0m"
+
+# Loop over my jobs, extract details
+counter=1
+for j in $myjobnos; do
+
+  jobno=`echo $myjobnos | awk -v c=$counter '{print $c}'`
+  jobname=`echo $myjobnames | awk -v c=$counter '{print $c}'`
+  jobnnodes=`echo $myjobnnodes | awk -v c=$counter '{print $c}'`
+  jobmemreqs=`echo $myjobmemreqs | awk -v c=$counter '{print $c}'`
+  jobtimereqs=`echo $myjobtimereqs | awk -v c=$counter '{print $c}'`
+  jobtimeelaps=`echo $myjobtimeelaps | awk -v c=$counter '{print $c}'`
+  jobstate=`echo $myjobstates | awk -v c=$counter '{print $c}'`
+
+  # Find position in idle queue
+  idlepos=`echo $showqi | awk -v jobno=$jobno '{if($1 == jobno) print NR-4}'` # 4 uninteresting lines at front of output
+  if [ -z "$idlepos" ]; then
+    # Job not in Idle. See if it's running
+    if [ $jobstate == "R" ]; then
+      idlepos="RUNS"
+    else
+      if [ $jobstate == "C" ]; then
+        idlepos="DONE"
+      else
+        if [ $jobstate == "H" ]; then
+          idlepos="HELD"
+        else
+          # NB: A race condition can lead to just-started jobs winding up here.
+          #     This happens when myjobstates (collected before the loop) marks the job as 'Q',
+          #     but by the time the loop executes the job is not in the idle queue anymore.
+          #     To avoid having jobs shown as "BLKD (Running)", verify if we've hit this corner case.
+          perhaps_just_started=`echo $showqr | awk -v jobno=$jobno '{if($1 == jobno) print $2}'`
+          if [ ! -z "$perhaps_just_started" ]; then
+            idlepos="INIT"
+          else
+            idlepos="BLKD"
+          fi
+        fi
+      fi
+    fi
+  fi
+
+  # Skip blocked jobs if user desired
+  if [ "$idlepos" == "BLKD" ] && [ "$ignoreblocked" == "1" ]; then
+    let "counter++" # since the one at the end of the loop is foregone
+    let "blockedcounter++"
+    continue
+  fi
+
+  # Skip done jobs if user desired
+  if [ "$idlepos" == "DONE" ] && [ "$ignoredone" == "1" ]; then
+    let "counter++" # since the one at the end of the loop is foregone
+    let "donecounter++"
+    continue
+  fi
+
+  q=`qstat -f $j`
+  checkjob=`checkjob -v $j`
+
+  if [ "$idlepos" == "BLKD" ]; then
+    if [ `echo $checkjob | grep "Defer" | wc -l` -gt 0 ]; then
+      idlepos="DFRD"
+    fi
+  fi
+
+  nodecount=`echo $q | grep "nodect = " | awk '{print $NF}'`
+  tpncount=`echo $q | grep "tpn = " | awk '{print $NF}'`
+  pmem=`echo $q | grep "pmem = " | awk '{print $NF}'`
+  ppncount=`echo $q | grep ":ppn=" | tr "=" " " | awk '{print $NF}'`
+  # Depending on whether ppn or tpn was specified, the info on cores per node is extracted differently
+  if [ -z "$tpncount" ]; then # tpn not specified
+    if [ -z "$ppncount" ]; then
+      let "pernode=1"        # neither of tpn, ppn specified
+    else
+      let "pernode=ppncount" # only ppn specified
+    fi
+  else # tpn specified
+    if [ -z "$ppncount" ]; then
+      # This weird behaviour is documented at
+      # http://www.adaptivecomputing.com/resources/docs/mwm/13.3rmextensions.php#tpn where it says:
+      # The second major difference is that the line, nodes=X:ppn=Y actually requests X*Y tasks,
+      # whereas nodes=X,tpn=Y requests only X tasks.
+      let "nodecount=nodecount/tpncount"
+      let "pernode=tpncount"
+      if [ $nodecount == 0 ]; then
+        nodecount="BAD"
+        pernode=""
+      fi
+    else
+      # both ppn and tpn specified. Not sure what now, let's go for "???"
+      pernode=""
+    fi
+  fi
+  if [ -z "$pernode" ]; then
+    pernode="???"
+    ncores="???"
+  else
+    let "ncores=nodecount*pernode"
+  fi
+
+  reqhrs=`echo $jobtimereqs | tr ":" " " | awk '{print $1}'`
+  reqmins=`echo $jobtimereqs | tr ":" " " | awk '{print $2}'`
+  elaphrs=`echo $jobtimeelaps | tr ":" " " | awk '{print $1}'`
+  elapmins=`echo $jobtimeelaps | tr ":" " " | awk '{print $2}'`
+
+  # Calculate remaining time
+  if [ "$jobtimeelaps" != "--" ]; then
+    let "tremaining_in_mins=(10#$reqhrs-10#$elaphrs)*60+(10#$reqmins-10#$elapmins)" # 10# needed, because let gets confused with leading 0 (thinks octal).
+    let "hrsremaining=tremaining_in_mins/60"
+    let "minsremaining=tremaining_in_mins%60"
+    # Pad with 0
+    timeremaining=`echo $hrsremaining $minsremaining | awk '{h=$1; m=$2; if(length(h)==1) h="0"h; if(length(m)==1) m="0"m; printf("%s:%s",h,m)}'`
+  else
+    # Elapsed job time unknown. It's fine if the job's not running.
+    # If it is running, something's funky (like a node is down)
+    if [ "$jobstate" != "R" ]; then
+      timeremaining="$jobtimereqs"
+    else
+      timeremaining="???"
+    fi
+  fi
+
+  # If remaining time is "00:-1" or so, it's just completed (used slightly more than req'd before it was terminated)
+  timeremaining=`echo $timeremaining | awk '{if($1 ~ "-") print "NONE!"; else print $1}'`
+
+  # Calculate eligible time
+  eligible=`echo $checkjob | grep Eligible | grep -v BecameEligible | sed -r -e "s/:..\)//" -e "s/.*ble: //"`
+
+  # Find X-factor
+  xf1=`echo $showqi | awk -v jobno=$jobno '{if($1 == jobno) print $3}'`
+  xf2=`echo $showqr | awk -v jobno=$jobno '{if($1 == jobno) print $5}'`
+  if [ -z "$xf1" ]; then
+    xf=$xf2
+  else
+    xf=$xf1
+  fi
+  # Trap the case where the job is neither in running nor in idle (then xf="")
+  # or raced from one queue to the other (then the wrong column gets extracted)
+  # and is non-numerical -- this is trapped by the second condition.
+  if [ -z "$xf" ] || [ `echo "$xf" | awk '{print $1+0}'` == "0" ]; then
+    xf="---"
+  fi
+
+  # Find Priority
+  p=`echo $showqi | awk -v jobno=$jobno '{if($1 == jobno) print $2}'`
+  if [ -z "$p" ]; then
+    # Job not in Idle. See if it's running
+    is_running=`echo $showqr | awk -v jobno=$jobno '{if($1 == jobno) print $2}'`
+    if [ ! -z "$is_running" ]; then
+      p="(Running)"
+    else
+      if [ $jobstate == "C" ]; then
+        p="(Completed)"
+      else
+        p="(Blocked?)"
+      fi
+    fi
+  fi
+
+  # Find reservation
+  reservation=`echo "$checkjob" | grep Reservation | awk '{print $3}' | sed "s/(//"`
+  if [ -z "$reservation" ]; then
+    if [ -z "$checkjob" ]; then
+      reservation="QUERY_FAILED"
+    else
+      reservation="*None*"
+    fi
+  fi
+
+  # Find gold/nogold
+  g1=`echo $showqi | awk -v jobno=$jobno '{if($1 == jobno) print $4}'`
+  g2=`echo $showqr | awk -v jobno=$jobno '{if($1 == jobno) print $6}'`
+  if [ -z "$g1" ]; then
+    g=$g2
+  else
+    g=$g1
+  fi
+  if [ -z "$g" ]; then
+    g="?"
+  fi
+
+  # gold=0 - standard service, gold=1 - enhanced, gold=2 - unknown
+  # Note that examining "$g" is not enough -- when a job is held, it
+  # doesn't appear in showqi or showqr
+  if [ "$g" == "en" ] || [ `echo $checkjob | grep "qos:enhanced" | wc -l` -ge 1 ]; then
+    gold=1
+  else 
+    if [ "$g" == "st" ]; then
+      gold=0
+    else
+      gold=2
+    fi
+  fi
+
+  # Has NACCESSPOLICY:SINGLEJOB?
+  singlejob=`echo $q | grep -i "SINGLEJOB" | wc -l`
+
+  # Find PBS_O_WORKDIR
+  line1=`echo "$q" | grep -n PBS_O_WORKDIR | tr ":" " " | awk '{print $1}'`
+  path=`echo "$q" | awk -v line1=$line1 '{if(NR>=line1) print $0}' | tr "\t\n" "~~" | sed "s/~~//" \
+                  | sed -r -e "s/~PBS_O_WORKDIR=//" -e "s/,~*PBS_O.*//" -e "s/\\/home\\/$user/~/"`
+
+  # Sometimes PBS_O_QUEUE winds up _above_ PBS_O_WORKDIR, then path extraction fails.
+  # Set path to something non-empty, otherwise awk gets confused later on.
+  if [ -z "$path" ]; then
+    path="???"
+  fi
+
+  if [ $gold -eq 1 ]; then
+    echo -ne "\033[1;33m"
+  else
+    echo -ne "\033[1;37m"
+  fi
+
+  # Shorten PATH to fit on screen, strip final ~ that gets there under new Moab
+  path=`echo "$path" | awk -v cols=$columns -v mincols=$mincols '{
+    maxpathlength=cols-mincols
+    if(length($1)>maxpathlength) {
+      path="..."substr($1,length($1)-maxpathlength,maxpathlength+1)
+    }
+    else {
+      path=$1
+    }
+    print path
+  }' | sed -r "s/~$//" `
+
+  # Are there any policy violations?
+  policy=`echo $checkjob | grep violates | sed -r "s/.*violates //" | cut -c 1-18 | tr " " "_"`
+  if [ -z "$policy" ]; then
+    policy=OK
+  fi
+
+  # No explicit memory reqs via "mem=", so examine pmem.
+  if [ "$jobmemreqs" == "--" ]; then
+    # convert to bytes first. $() is ``, $[] evaluates expressions
+    pmem=$( echo $[ `echo "$pmem" | sed -e "s/kb/*1024/" -e "s/mb/*1024*1024/" -e "s/gb/*1024*1024*1024/" -e "s/b//"` ] )
+    if [ -z "$pmem" ]; then # sth went wrong
+      pmem="???"
+    else
+      # Now convert to gb, multiply by ncores. Denote default memory by "*", pmem by P
+      if [ "$ncores" != "???" ]; then
+        pmem=`echo $pmem $ncores | awk '{if($1==2936012800) flag="*"; else flag="P"; printf("%s%dgb",flag,$1/1024/1024/1024*$2)}'`
+      else
+        pmem="???"
+      fi
+      jobmemreqs="$pmem"
+    fi
+  fi
+
+  # Determine if a red node is enough
+  if [ "$jobmemreqs" != "???" ]; then
+    parsed=`echo $jobmemreqs | tr "P*" " "`
+    # convert to bytes first. $() is ``, $[] evaluates expressions
+    parsed=$( echo $[ `echo "$parsed" | sed -e "s/kb/*1024/" -e "s/mb/*1024*1024/" -e "s/gb/*1024*1024*1024/" -e "s/b//"` ] )
+    needs_orange=`echo $parsed $jobnnodes | awk -v max=$rednodememory '{if($1/$2 > max) print 1; else print 0}'`
+    if [ "$needs_orange" == "1" ]; then
+      memcolor="\033[43;1m"
+    else
+      memcolor=""
+    fi
+  else
+    memcolor=""
+  fi
+
+  # Output a line corresponding to current job
+  echo "$jobno" "$jobname" "$nodecount" "$ncores" "$jobmemreqs" "$jobtimereqs" "$jobtimeelaps" "$timeremaining" "$jobstate" "$xf" "$p" "$reservation" "$path" "$idlepos" "$singlejob" "$eligible"| \
+       awk -v policy=$policy -v memcolor=$memcolor '{
+          pos=$14
+          if(pos != "BLKD" && pos !="DFRD") poscolor="\033[0m"; else poscolor="\033[1;31m";
+          if($8 != "???") timeremcolor="\033[0m"; else {timeremcolor="\033[1;31m"; pos="HMMM"; poscolor="\033[1;31m"}
+          if(policy == "OK") polcolor="\033[0m"; else polcolor="\033[1;31m";
+          if($15 == 0) nodescolor="\033[0m"; else nodescolor="\033[1;33m";
+          if($5 ~ "*") mem1color="\033[1;30m"; else mem1color="\033[0m";
+          if($9 == "R") {
+            runcolor="\033[1;35m"
+          } else if($9 == "H") runcolor="\033[1;34m"; else runcolor="\033[0m"
+          printf("%8d \033[0m"poscolor"%4s "polcolor" %14s\033[0m "nodescolor"%4s\033[0m %4s "mem1color"%7s"memcolor" \033[0m%6s %6s "timeremcolor"%6s\033[0m %8s "runcolor"%1s\033[0m %4s %11s %12s %s\n",$1,pos,substr($2,1,14),$3,$4,$5,$6,$7,$8,$16,$9,$10,$11,$12,$13)
+       }'
+
+  # In verbose mode, print details for all jobs, to a file in /tmp
+  if [ $verbose -eq 1 ]; then
+    echo $checkjob >$datafile.$j
+
+    if [ "$jobstate" == "R" ]; then
+      echo "Processors in use:" >$datafile.nodes.$j
+      line1=`echo $q | grep -n exec_host | tr ":" " " | awk '{print $1}'`
+      line2=`echo $q | grep -n Hold_Types | tr ":" " " | awk '{print $1}'`
+      echo $q | awk -v line1=$line1 -v line2=$line2 '{if(NR>=line1 && NR<line2) print $0}' \
+              | sed "s/exec_host = //" | tr "\n\t" "~" | sed "s/~~//g" | sed -r "s/~$//" \
+              | sed -r "s/^ *//" | sed -r "s/\\/.//g" | tr "+" " " | tr " " "\n" | uniq -c \
+              | awk '{printf("%s x %d | ",$2,$1)} END{printf("\n")}' >>$datafile.nodes.$j
+      echo -e " \nResources in use:" >>$datafile.nodes.$j
+      echo $q | grep resources_used | sed "s/resources_used.//" >>$datafile.nodes.$j
+
+    else
+      echo "" >$datafile.nodes.$j
+    fi
+  fi
+
+  let "counter++"
+done
+
+if [ "$ignoreblocked" == "1" ]; then
+  if [ $blockedcounter -gt 0 ]; then
+    echo ": $blockedcounter blocked jobs belonging to you were not displayed."
+  else
+    echo ": Hurray, you have no blocked jobs!"
+  fi
+fi
+
+if [ "$ignoredone" == "1" ]; then
+  if [ $donecounter -gt 0 ]; then
+    echo ": $donecounter completed jobs belonging to you were not displayed."
+  else
+    echo ": You have no completed jobs."
+  fi
+fi
+
+# Find number of jobs in idle ahead of my first job
+jobsahead=`echo "$showqi" | awk -v user=$user '{if($1 ~ "^[0-9]") counter++; if($5 == user) {print counter-1; exit}}'`
+
+# Find the number of processors in running that will be freed within the next hour
+freesoon=`echo $showqr | awk 'BEGIN{redsum=0; orasum=0} {if(substr($11,1,2) == "00") {if(substr($9,1,3)=="red") redsum+=$10; if(substr($9,1,3)=="ora") orasum+=$10}} END{print redsum" red and "orasum" orange"}'`
+if [ -z "$jobsahead" ]; then
+  echo ": You have no queued jobs."
+else
+  echo ": $jobsahead jobs of others ahead of your first queued job."
+fi
+echo ": $freesoon processors will be freed within the next hour."
+echo ": "`echo $showqr | grep processors | sed "s/active jobs/active jobs,/"`
+echo ":"`echo $showqr | grep nodes`
+
+IFS="$IFSBAK"
+
+# Acknowledge completion
+if [ $verbose -eq 1 ]; then
+  touch $datafile.done
+fi

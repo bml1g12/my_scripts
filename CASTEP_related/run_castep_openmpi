@@ -1,0 +1,48 @@
+#!/bin/bash
+# Run Castep batch job
+
+# set default resource requirements for job 
+# - these can be overridden on the qsub command line 
+# (this is for a 4 hour job on a single node using 8 processors per node)
+#PBS -N EXP019C_bulk
+#PBS -l nodes=1,tpn=16,naccesspolicy=singlejob
+#PBS -l walltime=24:00:00
+
+#Change to directory from which job was submitted
+cd $PBS_O_WORKDIR
+
+ndatfiles=`ls *.param | wc -l`
+
+if [ $ndatfiles -eq 0 ]; then
+  echo "No .param files in `pwd`. Aborting." >&2
+  exit 101
+fi
+
+if [ $ndatfiles -gt 1 ]; then
+  echo "More than one param file in `pwd`, don't know which one to choose. Aborting." >&2
+  exit 102
+fi
+
+rootname=`echo *.param | sed -r "s/\.param\$//"`
+
+set basenname for calculation
+seed=$rootname
+
+# set up directory for temporary files 
+export TMPDIR=/scratch/$USER/castep-${seed}_$$
+mkdir -p $TMPDIR
+
+# setup software environment
+module load openmpi/1.6.4
+module load castep/6.11
+
+#set up pseudopotential librarys environment vairable
+export PSPOT_DIR=/home/bml1g12/project/pseudopotentials:/home/bml1g12/project/pseudopotentials/Civeralli
+
+echo "--- Running $rootname in `pwd`. It's `date`"
+
+export MPI_DSM_DISTRIBUTE=yes   # Not sure if this is necessary!
+mpirun -np 16 castep $seed
+rm -fr $TMPDIR
+
+echo "--- Done. It's `date`"

@@ -1,0 +1,67 @@
+#example PBS submit script for Iridis3.
+# Created by Jacek Dziedzic, 01/08/2011.
+# Modified by Ben Lowe 09/04/2014
+# 09/04/2014: added accurate wall timings
+
+
+#PBS -S /bin/bash
+#PBS -q batch
+#PBS -l nodes=1,tpn=3,naccesspolicy=singlejob
+#PBS -A sky
+#PBS -l walltime=48:00:00
+#PBS -N EXP035O_water_IS
+
+# You might find these directives useful:
+# - To use enhanced (gold) service: PBS -A sky
+# - To prevent other jobs from running on the same node: PBS -W "x=NACCESSPOLICY:SINGLEJOB"
+
+# Full path-and-filename of your ONETEP executable, adjust to your needs
+exe="/home/bml1g12/ONETEP_3.5.9.8/devel/bin/onetep.iridis4"
+
+cd $PBS_O_WORKDIR
+
+#export OMP_NUM_THREADS=2
+ulimit -s unlimited
+
+START=$(date +%s.%N)
+echo "--- Running $exe in `pwd`. It's `date`"
+
+ndatfiles=`ls *.dat | wc -l`
+
+if [ $ndatfiles -eq 0 ]; then
+  echo "No .dat files in `pwd`. Aborting." >&2
+  exit 101
+fi
+
+if [ $ndatfiles -gt 1 ]; then
+  echo "More than one dat file in `pwd`, don't know which one to choose. Aborting." >&2
+  exit 102
+fi
+
+rootname=`echo *.dat | sed -r "s/\.dat\$//"`
+
+if [ ! -x "$exe" ]; then
+  echo "$exe in `pwd` does not exist or is not executable. Aborting!"
+  exit 103
+fi
+
+
+module load openmpi/1.6.4/intel
+module unload intel/2013.4
+module load intel/mkl/2013.2
+module load intel/2013.2
+
+mpirun -np 3 $exe $rootname.dat > $rootname.onetep 2>$rootname.err
+#result below can be used to check T or F if ONETEP has executed correctly I think...
+result=$?
+
+echo "--- Running $exe in `pwd`. It's `date`"
+touch "%DONE"
+
+echo "--- Done. It's `date`"
+END=$(date +%s.%N)
+DIFF=$(echo "$END - $START" | bc)
+echo "Wall Time Taken: $DIFF seconds"
+hours_taken=$(echo "$DIFF / 3600" | bc -l)
+printf "Or Wall Time Taken: %0.3f hours\n" $hours_taken
+

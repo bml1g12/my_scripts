@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# ars: this script generates a set of input files for eggbox effect calculation
+#      given an initial file, the steplength, no of steps and the direction on grid
+# ars: Created by Alvaro Ruiz Serrano on 28/10/2011
+
+# ars: get inputs
+if [ $# -lt 4 ]; then
+  echo "Need four arguments: 1) the original file"
+  echo "                     2) the steplength"
+  echo "                     3) number of steps"
+  echo "                     4) direction on grid (x,y,z)"
+  exit
+fi
+file=$1                             # original .dat file (ONETEP)
+filename=`echo $1 | sed "s/.dat//"`
+step=$2                             # steplength (in Bohr)
+nsteps=$3                           # number of steps
+direction=$4                        # direction on grid (x,y,z)
+
+# ars: welcome
+echo "Generating the files for eggbox calculation using the following parameters:"
+echo "file=" $file
+echo "step=" $step
+echo "nsteps=" $nsteps
+echo "direction=" $direction
+
+# ars: isolate all that is not "position_abs"
+grep "%block *positions_abs" $file -B 200000    > ${filename}_part1
+grep "%endblock *positions_abs" $file -A 200000 > ${filename}_part2
+
+# ars: isolate initial coordinates
+grep "%block *positions_abs" $file -A 200000 | grep "%endblock *positions_abs" -B 20000 | sed "/block/d"> ${filename}_pos_0.00
+
+# ars: generate files
+for i in `seq 0 $nsteps` ; do
+   # ars: generate positions
+   delta=`echo $step $i | awk '{printf("%5.3f", $1*$2)}'`;
+   echo "delta=" $delta ;
+   outfile=`echo ${filename}_${direction}_${delta}`;
+   if [ $direction == "x" ] ; then
+      awk -v delta=$delta '{printf("%s %20.12f %20.12f %20.12f\n",$1, $2+delta, $3, $4)}' ${filename}_pos_0.00 > pos_${outfile};
+   elif [ $direction == "y" ] ; then
+      awk -v delta=$delta '{printf("%s %20.12f %20.12f %20.12f\n",$1, $2, $3+delta, $4)}' ${filename}_pos_0.00 > pos_${outfile};
+   elif [ $direction == "z" ] ; then
+      awk -v delta=$delta '{printf("%s %20.12f %20.12f %20.12f\n",$1, $2, $3, $4+delta)}' ${filename}_pos_0.00 > pos_${outfile};
+   else
+      echo "Error: direction not specified!";
+      rm -f ${filename}_part1 ${filename}_part2 ${filename}_pos_0.00 pos_*;
+      exit;
+   fi; 
+
+   # ars: put together all the files
+   cat  ${filename}_part1 pos_${outfile} ${filename}_part2 > ${outfile}.dat;
+done 
+
+
+# ars: clear up
+rm -f ${filename}_part1 ${filename}_part2 ${filename}_pos_0.00 pos_*
+
+# ars: Good bye
+echo ""
+echo "Done! ^.^"

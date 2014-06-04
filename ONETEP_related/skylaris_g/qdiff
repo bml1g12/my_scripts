@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# ars: diff two queues save on disk. Use with qsave
+# Created by Alvaro Ruiz Serrano on Sept 2011
+
+file1=~/queue.1
+file2=~/queue.2
+
+username="ars1g08"
+
+echo ""
+echo "Jobs still in the queue"
+echo ""
+for i in `grep $username $file1 | awk '{if($10!="C") print $1}'` ; do grep $i $file2 | awk '{if($10!="C") print $0}' ; done
+
+echo ""
+echo "New jobs in the queue"
+echo ""
+for i in `grep $username $file2 | awk '{if($10!="C") print $1}'` ; do
+   nn=`grep $i $file1 | wc -l` ;
+   if [ "$nn" == "0" ] ; then
+      grep $i $file2
+   fi ;
+done
+
+echo ""
+echo "Jobs finished"
+echo ""
+for i in `grep $username $file1 | awk '{print $1}'` ; do
+   nn=`grep $i $file2 | wc -l` ;
+   if [ "$nn" == "0" ] ; then
+      grep $i $file1
+   fi ;
+done
+grep $username $file2 | awk '{if($10=="C") print $0}'

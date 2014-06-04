@@ -1,0 +1,81 @@
+#example PBS submit script for Iridis3.
+# Created by Jacek Dziedzic, 01/08/2011.
+
+# The Intel compiler (2011.4) is used.
+# OpenMPI v1.4.3 is used.
+# FFTW3 included with the new MKL is used.
+
+#PBS -S /bin/bash
+#PBS -q batch
+#PBS -l nodes=2,tpn=16,naccesspolicy=singlejob
+#PBS -A sky
+#PBS -l walltime=60:00:00
+#PBS -N EXP027O_E_convergence
+
+# You might find these directives useful:
+# - To use enhanced (gold) service: PBS -A sky
+# - To prevent other jobs from running on the same node: PBS -W "x=NACCESSPOLICY:SINGLEJOB"
+
+# Full path-and-filename of your ONETEP executable, adjust to your needs
+exe="/home/bml1g12/ONETEP_3.5.9.8/devel/bin/onetep.iridis4"
+
+cd $PBS_O_WORKDIR
+
+echo "--- Running $exe in `pwd`. It's `date`"
+
+ndatfiles=`ls *.dat | wc -l`
+
+if [ $ndatfiles -eq 0 ]; then
+  echo "No .dat files in `pwd`. Aborting." >&2
+  exit 101
+fi
+
+if [ $ndatfiles -gt 1 ]; then
+  echo "More than one dat file in `pwd`, don't know which one to choose. Aborting." >&2
+  exit 102
+fi
+
+rootname=`echo *.dat | sed -r "s/\.dat\$//"`
+
+if [ ! -x "$exe" ]; then
+  echo "$exe in `pwd` does not exist or is not executable. Aborting!"
+  exit 103
+fi
+
+
+module load openmpi/1.6.4/intel
+module load intel/2013.4
+module load intel/mkl/2013.2
+
+i=100
+while [ $i -le 200 ]
+do
+  dir=${i}
+  #imcrement i
+  echo "generating param files for $i Cutoffs Energy in ./$dir/"
+  #Make a directory for each KE cutoff. The -p flag, means no error if existsing
+  mkdir -p $dir
+  #Match line with cut_off_energy and all that follows and replace with the string
+  #you'd like, which here is the same but with a different cutoff.
+  #put into the folder created above
+  sed -i "s/CUTOFF_ENERGY.*/CUTOFF_ENERGY $i eV/" $rootname.dat
+  echo "$i"
+  echo "copying relevant input files *.dat *.trjaux *.xsd *.xms"
+  echo "into ./$dir/"
+  cp *.trjaux ./$dir/
+  cp *.dat ./$dir/
+  cp *.xms ./$dir/
+  cp *.xsd ./$dir/
+  cp *.recpot ./$dir/
+  echo "entering ./$dir/"
+  cd $dir
+  echo "--- Running $exe in `pwd`. It's `date`"
+  mpirun -np 32 $exe $rootname.dat > $rootname.onetep 2>$rootname.err
+  result=$?
+  rm -fr $TMPDIR
+  cd ../
+  echo "returning to" `pwd`
+  i=`expr $i + 100`
+done
+touch "%DONE"
+echo "--- Done. It's `date`"

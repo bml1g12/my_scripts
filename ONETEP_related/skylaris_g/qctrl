@@ -1,0 +1,628 @@
+#!/bin/bash
+
+#########################################################
+# 2011.05.23-24 by Jacek Dziedzic, jack.erede@gmail.com
+# v1.40
+#########################################################
+
+# Redraw display every 5 seconds (of inactivity)
+refreshinterval=5     # How often the display is refreshed (s). This does not refresh the data, only redraws.
+
+# Update contents every ca 2 mins (of inactivity)
+# Don't set this too low because it puts strain on Iridis
+fullupdateinterval=24 # How many refresh intervals before a full update is performed.
+
+visiblenjobs=15       # How many jobs are visible before scrolling takes place
+pgupdn=10             # How many jobs are skipped with PgUp & PgDn
+ignoreblocked=0       # set to 1 to ignore blocked jobs BY DEFAULT (to increase performance for scenarios with tons of jobs)
+ignoredone=0          # set to 1 to ignore done (completed) jobs BY DEFAULT (to increase performance for scenarios with tons of jobs)
+
+mincols=114           # Don't mess with that
+debug=0               # or that
+
+#########################################################
+# v1.31 -- displays *BUSY* when busy
+# v1.33 -- allows ignoring blocked jobs (-b flag or press 'b')
+# v1.34 -- moves deferred jobs to the bottom of the list
+# v1.35 -- moves and held jobs too
+# v1.36 -- bugfix: some nodes were missing from long lists in details
+# v1.37 -- version # includes qq's version
+# v1.38 -- shows Holds in 'Details'
+# v1.39 -- works fine with 7-digit job numbers
+# v1.40 -- allows ignoring completed jobs (-c flag or press 'c')
+#########################################################
+
+user=`whoami`
+datafile="/tmp/qq.$user"
+datafilecopy="/tmp/qctrl.$user"
+#redrawfile="/tmp/qctrl.$user.redraw"
+redrawfile="/dev/shm/qctrl.$user.redraw"
+banner="\033[1;37mqctrl `head $0 | grep '# v' | sed 's/# //'`/`qq -V | sed 's/qq v//'` \033[m"
+status1="Last ran"
+
+# ---------------------------------------------------------------
+function updateqqflags() {
+  qqflags=""
+  if [ "$ignoreblocked" == "1" ]; then
+    qqflags=$qqflags" -b"
+  fi
+  if [ "$ignoredone" == "1" ]; then
+    qqflags=$qqflags" -c"
+  fi
+}
+
+# ---------------------------------------------------------------
+function showdetails() {
+  echo >>$redrawfile
+  # Pick the right line from data. JOB ID is in the 1st column, or 2nd if color codes are used
+  jobno=`echo $data | awk -v cursorat=$cursorat '{if(NR==cursorat+1) if($1 ~ "\\\\[") print $2; else print $1}'`
+  echo "----- Details for job $jobno -----" >>$redrawfile
+  if [ -z "$jobno" ] || [ "$jobno" == "0" ]; then # a bug or a job disappeared due to a race
+    return
+  fi
+  cat $datafilecopy.$jobno | grep Holds                        >>$redrawfile
+  cat $datafilecopy.$jobno | grep NOTE | sed "s/ NOTE/NOTE/"   >>$redrawfile
+  cat $datafilecopy.$jobno | grep -v NOTE | grep violates      >>$redrawfile
+  cat $datafilecopy.$jobno | grep -i defer                     >>$redrawfile
+  cat $datafilecopy.$jobno | grep -i Message                   >>$redrawfile
+  # Break on '|', fitting into columns. This is tricky!
+  cat $datafilecopy.nodes.$jobno | grep -vE "^$" | awk -v columns=$columns '{
+    if(length($0)<=columns) print $0;
+    else {
+      b=0
+      ofsset=0
+      # long line, break it
+      for(i=1;i<=length($0);++i) { 
+        if(substr($0,i,1)=="|") {
+          barpos[b]=i
+          b++
+        }
+      }
+      nbars=b
+      line=$0
+      start=1
+      not_done=1
+      while( not_done ) {
+        # barpos[] contains indices of all "|", find last bar that fits
+        for(b=1;b<nbars;++b) {
+          if(barpos[b]-start+1 > columns) break;
+        }
+        b-- # is the last bar that fits
+        end=barpos[b]
+
+        # print a chunk that fits
+        printf("%s\n",substr(line,start,end-start+1))
+        start=end+2 # also skip the space that follows the bar
+        if(start>=length(line)) not_done = 0
+      }
+    }
+  }' >>$redrawfile
+}
+
+# ---------------------------------------------------------------
+function cleanup() {
+    rm -f $datafile.done 2>/dev/null
+    rm -f $datafile 2>/dev/null
+    rm -f $datafile.* 2>/dev/null
+    ps aux | grep "qq -v" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null
+    result=$?
+    if [ $result -eq 0 ]; then
+      echo "NB: Killed at least one running instance of qq during cleanup."
+      sleep 1
+    fi
+}
+
+# ---------------------------------------------------------------
+function reinitialization() {
+  # First run or /tmp cleaned
+  clear
+  echo "Reinitialization in progress."
+  if [ ! -z "$forced_reinit" ]; then
+    echo "This reinitialization was forced: $forced_reinit"
+  else
+    echo "Reinitialization needed because it's a first run or /tmp was cleaned recently."
+  fi
+  echo "Please wait."
+  # Clean up any potentially running qq's and their datafiles
+  cleanup
+  qq -v $qqflags >$datafile 2>$datafile.log
+  result=$?
+  if [ $result -ne 0 ]; then
+    echo "qq reported an error: $result. The error message is:" >&2
+    echo "---" >&2
+    tail -n 1 $datafile.log >&2
+    echo "---" >&2
+    echo "Retrying in a minute..." >&2
+    sleep 60
+  fi
+  update2 # naughty hack. This will re-run cleanup2-reinitialization until it works or stack is exhausted :o.
+}
+
+# ---------------------------------------------------------------
+# Reruns qq
+function update1() {
+  checkcolumns
+  rm -f $datafile.done 2>/dev/null
+  # Wait until it happens, so that update2 doesn't race to it
+  while [ -r $datafile.done ]; do
+    sleep 1
+  done
+  qq -v $qqflags >$datafile 2>$datafile.log &
+  status2="[Updating in the background]"
+}
+
+# ---------------------------------------------------------------
+# Updates internal data structures to copy of qq's output
+function update2() {
+  IFS=""
+  # If qq finished and data is ready
+  if [ -r "$datafile.done" ]; then
+    echo -ne "\010\010\010\010\010\010\040\010WAIT "
+    cp -a $datafile $datafilecopy
+    echo -n "."
+    c="|"
+    for f in $datafile.*; do
+      cp -a $f `echo $f | sed "s/qq./qctrl./"`
+      echo -ne "\010$c"
+      if [ "$c" == "\\" ]; then c="|"; fi
+      if [ "$c" == "-" ]; then c="\\"; fi
+      if [ "$c" == "/" ]; then c="-"; fi
+      if [ "$c" == "|" ]; then c="/"; fi
+    done
+    echo
+    status1="Updated"
+    status2=""
+  fi
+  # Else continue working on a copy. Also make a copy after the update above.
+  if [ -r "$datafilecopy.done" ]; then
+    data=`tail -n +2 $datafilecopy | grep -Ev "^:" | grep -vE "(BLKD)|(DFRD)|(HELD)" | sort -g -k4; tail -n +2 $datafilecopy | grep -E "(BLKD)|(DFRD)|(HELD)"`
+    furtherdata=`tail -n +2 $datafilecopy | grep -E "^:"`
+    ndata=`echo $data | wc -l | awk '{print $1}'`
+    let "ndata-=1"
+    timestamp=`stat $datafilecopy | grep Modify | sed "s/Modify: //" | sed -r "s/\\\\..*//"`
+    time0=`date -d "$timestamp" +%s`
+    updatetime
+    # If we're in the middle of a bkg update, check on it
+    if [ ! -z "$status2" ]; then
+      running_qqs=`ps aux | grep "qq -v" | grep -v grep | wc -l`
+      if [ "$running_qqs" -eq 0 ]; then
+        forced_reinit="Background script qq died unexpectedly. This could indicate MOAB problems. `tail $datafile.log`. If you have *no* jobs, ignore this error."
+        reinitialization
+      fi
+    fi
+  else
+    reinitialization
+  fi
+  IFS="$IFSBAK"
+}
+
+# ---------------------------------------------------------------
+function redraw() {
+  IFS=""
+  checkcolumns
+  updatedots=`echo $full_update_counter $fullupdateinterval | awk '{s="|"; for(i=1;i<=$1;++i) s=s"."; for(i=$1+1;i<=$2;++i) s=s" "; print s"|"}'`
+  echo -e "$banner | $status1 at $timestamp ($timediff ago) $updatedots $status2" >$redrawfile
+  if [ "$debug" -eq 1 ]; then
+    echo "qqflags $qqflags" >>$redrawfile
+    echo "Columns: $columns"         >>$redrawfile
+    echo "Holdlist: $holdlist"       >>$redrawfile
+    echo "Releaselist: $releaselist" >>$redrawfile
+    echo "Deletelist: $deletelist"   >>$redrawfile
+  fi
+  echo $data | awk -v cursorat=$cursorat -v holdlist="$holdlist" -v releaselist="$releaselist" \
+                   -v deletelist="$deletelist" -v visiblenjobs=$visiblenjobs -v ndata=$ndata -v visibleoffset=$visibleoffset '
+   BEGIN {
+     split(holdlist,hold_arr," ")
+     split(releaselist,release_arr," ")
+     split(deletelist,delete_arr," ")
+     njobsshown=-1 # accounts for title bar which is not a job
+   }
+   {
+
+     if(NR==1 && visiblenjobs<ndata) {
+       print " Jobs "visibleoffset+1"-"visibleoffset+1+visiblenjobs-1" of "ndata
+     }
+
+     # if(NR==1 && visibleoffset>0) {
+     #   print " ... "visibleoffset" more ..."
+     # }
+
+     if(njobsshown >= visiblenjobs) {
+       # print " ... "ndata-njobsshown-visibleoffset" more ..."
+       exit
+     }
+
+     if(NR != 1 && NR-1 <= visibleoffset) {
+       next
+     }
+
+     row_tagged = 0
+     for (held_index in hold_arr) {
+       if(hold_arr[held_index] == NR-1) {
+         printf("\033[1;40mH\033[0m")
+         row_tagged = 1
+       }
+     }
+     for (held_index in release_arr) {
+       if(release_arr[held_index] == NR-1) {
+         printf("\033[1;40mR\033[0m")
+         row_tagged = 1
+       }
+     }
+     for (held_index in delete_arr) {
+       if(delete_arr[held_index] == NR-1) {
+         printf("\033[1;31mK\033[0m")
+         row_tagged = 1
+       }
+     }
+     if(row_tagged == 0) printf(" ");
+     if(NR==cursorat+1) printf("\033[1;44m");
+     printf("%7s %s\n",substr($0,1,index($0," ")-1),substr($0,index($0," ")+1)) # Strips leading space, even if preceded by formatting codes
+     printf("\033[0m")
+     njobsshown++
+   }'                >>$redrawfile
+  echo               >>$redrawfile
+  echo $furtherdata  >>$redrawfile
+  showdetails
+  echo               >>$redrawfile
+
+  if [ "$ignoreblocked" == "0" ]; then
+    flip1="hide"
+  else
+    flip1="show"
+  fi
+  if [ "$ignoredone" == "0" ]; then
+    flip2="hide"
+  else
+    flip2="show"
+  fi
+  echo -e "\033[1;40m \033[1;44mq\033[0muit | \033[1;44mu\033[0mpdate | $flip1 \033[1;44mb\033[0mlocked | $flip2 \033[1;44mc\033[0mompleted | \033[1;44mi\033[0mnit | \033[1;44mh\033[0mold job | \033[1;44mr\033[0melease job | \033[1;44mk\033[0mill job | \033[1;44mc\033[0mommit holds, releases & kills? \033[0m" >>$redrawfile
+
+  IFS="$IFSBAK"
+  tput clear
+  cat $redrawfile
+}
+
+# ---------------------------------------------------------------
+# Expects time0 to be filled with the timestamp of the qq output file
+function updatetime() {
+  time1=`date +%s`
+  if [ ! -z "$time0" ] && [ ! -z "$time1" ]; then
+    timediff=`expr $time1 - $time0`
+    if [ $timediff -le 86400 ]; then # within a day
+      timediff=`date -d "1970-01-01 + $timediff seconds" +%T` # converts seconds into hh:mm:ss, h<=24
+    else
+      if [ $timediff -le 2592000 ]; then # with a month
+        timediff=`date -d "1970-01-01 + $timediff seconds" "+%d days %T"` # converts seconds into dd days hh:mm:ss, dd<=30
+      else
+        timediff="a long time"
+      fi
+    fi
+  else
+    timediff="???"
+  fi
+}
+
+# ---------------------------------------------------------------
+function checkinstances() {
+  nrunning_qctrls=`ps aux | grep "qctrl" | grep $user | grep -v grep | wc -l | awk '{print $1-1}'` # qc counts an empty line, apparrently. it's off by one
+  if [ "$nrunning_qctrls" -gt 1 ]; then 
+    echo "Aha! You tried to run more than one instance of qctrl. You tried to run $nrunning_qctrls." >&2
+    echo >&2
+    ps aux | grep "qctrl" | grep $user | grep -v grep >&2
+    echo >&2
+    echo "In the words of Quintin, 'this is not allowed!'." >&2
+    echo "Please kill the other instances first." >&2
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------
+function checkcolumns() {
+  columns=`tput cols`
+  export COLUMNS=$columns
+  rows=`tput lines`
+  export ROWS=$rows
+
+  if [ "$columns" -lt "$mincols" ]; then
+    echo "Your display is too narrow ($columns columns)." >&2
+    echo "At least $mincols columns are needed. Aborting." >&2
+    exit 2
+  fi
+}
+
+# ---------------------------------------------------------------
+constrain_cursor() {
+  if [ $cursorat -gt $ndata ]; then
+    let "cursorat=ndata"
+  fi
+  if [ $cursorat -lt 1 ]; then
+    let "cursorat=1"
+  fi
+  adjust_visible_range # scroll
+}
+
+# ---------------------------------------------------------------
+adjust_visible_range() {
+  let "maxvisible=visibleoffset+visiblenjobs"
+  # Scroll if cursor too far up
+  if [ $cursorat -le $visibleoffset ]; then
+    let "visibleoffset=cursorat-1"
+  fi
+  # Scroll if cursor too far down
+  if [ $cursorat -gt $maxvisible ]; then
+    let "visibleoffset=cursorat-maxvisible+visibleoffset"
+  fi
+}
+
+# ---------------------------------------------------------------
+function commit() {
+  IFS=""
+  # Convert a list of indices into a list of jobnos. Take care to ignore formatting codes...
+  echo -e "\nWill execute:"
+  hold_jobs=`echo $data | awk -v indices="$holdlist" 'BEGIN{split(indices,index_arr," ")} {for(i in index_arr) {if(NR-1==index_arr[i]) {if($1 ~ "^[0-9].*") print $1; else print $2}}}' | tr "\n" " "`
+  anything_to_do=0
+  if [ ! -z "$hold_jobs" ]; then
+    echo "qalter -h u $hold_jobs"
+    anything_to_do=1
+  fi
+  release_jobs=`echo $data | awk -v indices="$releaselist" 'BEGIN{split(indices,index_arr," ")} {for(i in index_arr) {if(NR-1==index_arr[i]) {if($1 ~ "^[0-9].*") print $1; else print $2}}}' | tr "\n" " "`
+  if [ ! -z "$release_jobs" ]; then
+    echo "qalter -h n $release_jobs"
+    anything_to_do=1
+  fi
+  delete_jobs=`echo $data | awk -v indices="$deletelist" 'BEGIN{split(indices,index_arr," ")} {for(i in index_arr) {if(NR-1==index_arr[i]) {if($1 ~ "^[0-9].*") print $1; else print $2}}}' | tr "\n" " "`
+  if [ ! -z "$delete_jobs" ]; then
+    echo "qdel $delete_jobs"
+    anything_to_do=1
+  fi
+  IFS=$IFSBAK
+
+  if [ $anything_to_do -eq 1 ]; then
+    REPLY="x"
+    while [ "$REPLY" != "y" ] && [ "$REPLY" != "n" ]; do
+      echo -ne "\nAre you sure? [y/n]"
+      read -n 1
+    done
+    if [ "$REPLY" == "n" ]; then
+      echo -e "\n *** Your chickening out has been noted. Press any key to continue."
+      read -n 1
+      REPLY=""
+    else
+      if [ ! -z "$hold_jobs" ]; then
+        qalter -h u $hold_jobs
+      fi
+      if [ ! -z "$release_jobs" ]; then
+        qalter -h n $release_jobs
+      fi
+      if [ ! -z "$delete_jobs" ]; then
+        qdel $delete_jobs
+      fi
+      holdlist=""
+      releaselist=""
+      deletelist=""
+      echo -e "\n *** Press any key to continue."
+      read -n 1
+      REPLY="u" # force update
+    fi
+  else
+    echo "Nothing to do!"
+    echo -e "\n *** Press any key to continue."
+    read -n 1
+  fi
+}
+
+# ---------------------------------------------------------------
+function mark_as_held() {
+  if [ "$ndata" == "0" ]; then
+    exit
+  fi
+  # Check if this job is in the holdlist
+  in_holdlist=`echo "x" | awk -v cursorat=$cursorat -v holdlist="$holdlist" 'BEGIN{split(holdlist,hold_arr," ")} {for(i in hold_arr) if(hold_arr[i] == cursorat) {print 1; exit}; print 0}'`
+  if [ "$in_holdlist" == "1" ]; then
+    # It is, toggle it off (remove from holdlist)
+    holdlist=`echo $holdlist | awk -v cursorat=$cursorat '{for(i=1;i<=NF;++i) if($i != cursorat) printf("%d ",$i)}'`
+  else
+    # It's not, add it. Use uniq to prevent duplicates.
+    holdlist=`echo "$holdlist $cursorat" | tr " " "\n" | sort | uniq | tr "\n" " "`
+    # Remove from releaselist, if present there
+    releaselist=`echo $releaselist | awk -v cursorat=$cursorat '{for(i=1;i<=NF;++i) if($i != cursorat) printf("%d ",$i)}'`
+    # Remove from deletelist, if present there
+    deletelist=`echo $deletelist | awk -v cursorat=$cursorat '{for(i=1;i<=NF;++i) if($i != cursorat) printf("%d ",$i)}'`
+  fi
+  redraw
+}
+
+# ---------------------------------------------------------------
+function mark_as_release() {
+  if [ "$ndata" == "0" ]; then
+    exit
+  fi
+  # Check if this job is in the releaselist
+  in_releaselist=`echo "x" | awk -v cursorat=$cursorat -v releaselist="$releaselist" 'BEGIN{split(releaselist,release_arr," ")} {for(i in release_arr) if(release_arr[i] == cursorat) {print 1; exit}; print 0}'`
+  if [ "$in_releaselist" == "1" ]; then
+    # It is, toggle it off (remove from releaselist)
+    releaselist=`echo $releaselist | awk -v cursorat=$cursorat '{for(i=1;i<=NF;++i) if($i != cursorat) printf("%d ",$i)}'`
+  else
+    # It's not, add it. Use uniq to prevent duplicates.
+    releaselist=`echo "$releaselist $cursorat" | tr " " "\n" | sort | uniq | tr "\n" " "`
+    # Remove from holdlist, if present there
+    holdlist=`echo $holdlist | awk -v cursorat=$cursorat '{for(i=1;i<=NF;++i) if($i != cursorat) printf("%d ",$i)}'`
+    # Remove from deletelist, if present there
+    deletelist=`echo $deletelist | awk -v cursorat=$cursorat '{for(i=1;i<=NF;++i) if($i != cursorat) printf("%d ",$i)}'`
+  fi
+  redraw
+}
+
+# ---------------------------------------------------------------
+function mark_as_delete() {
+  if [ "$ndata" == "0" ]; then
+    exit
+  fi
+  # Check if this job is in the holdlist
+  in_deletelist=`echo "x" | awk -v cursorat=$cursorat -v deletelist="$deletelist" 'BEGIN{split(deletelist,delete_arr," ")} {for(i in delete_arr) if(delete_arr[i] == cursorat) {print 1; exit}; print 0}'`
+  if [ "$in_deletelist" == "1" ]; then
+    # It is, toggle it off (remove from deletelist)
+    deletelist=`echo $deletelist | awk -v cursorat=$cursorat '{for(i=1;i<=NF;++i) if($i != cursorat) printf("%d ",$i)}'`
+  else
+    # It's not, add it. Use uniq to prevent duplicates.
+    deletelist=`echo "$deletelist $cursorat" | tr " " "\n" | sort | uniq | tr "\n" " "`
+    # Remove from releaselist, if present there
+    releaselist=`echo $releaselist | awk -v cursorat=$cursorat '{for(i=1;i<=NF;++i) if($i != cursorat) printf("%d ",$i)}'`
+    # Remove from hold, if present there
+    holdlist=`echo $holdlist | awk -v cursorat=$cursorat '{for(i=1;i<=NF;++i) if($i != cursorat) printf("%d ",$i)}'`
+  fi
+  redraw
+}
+
+# ---------------------------------------------------------------
+# ---------------------------------------------------------------
+############################################################################
+# main()
+############################################################################
+# ---------------------------------------------------------------
+# ---------------------------------------------------------------
+
+if [ "$1" == "-h" ] || [ "$1" == "-?" ] || [ "$1" == "--help" ]; then
+  qq -h
+  exit
+fi
+
+# Parse options
+while getopts "bc" flag; do
+  if [ "$flag" == "?" ]; then
+    echo "Improper invocation. " >&2
+    help
+  fi
+
+  if [ "$flag" == "b" ]; then ignoreblocked=1; fi
+  if [ "$flag" == "c" ]; then ignoredone=1; fi
+done
+
+qq -V >/dev/null
+if [ $? -ne 98 ]; then
+  echo "qq helper script absent (not in \$PATH) or obsolete version." >&2
+  exit 3
+fi
+
+IFSBAK="$IFS"
+
+updateqqflags
+checkcolumns
+checkinstances
+cleanup
+update2
+
+full_update_counter=0
+cont=1
+cursorat=1
+details=1
+visibleoffset=0
+while [ $cont == "1" ]; do
+  constrain_cursor # also does the scrolling
+  redraw
+  echo -en "\n \033[1;44mREADY>\033[0m"
+  REPLY="none"
+  read -n 1 -t $refreshinterval
+#  echo %$REPLY%
+#  sleep 1
+#  exit
+  # ENTER (currently a no-op)
+  if [ "$REPLY" == "" ]; then
+    true
+  fi
+  # No reply (timeout)
+  if [ "$REPLY" == "none" ]; then
+    update2
+    let "full_update_counter++"
+    # If several updates passed and there is no full update in progress, initiate one
+    if [ "$full_update_counter" -ge "$fullupdateinterval" ] && [ -z "$status2" ]; then
+      full_update_counter=0
+      REPLY="u" # fake update
+    fi
+  fi
+  # b flip show/hide blocked jobs
+  if [ "$REPLY" == "b" ]; then
+    let "ignoreblocked=1-ignoreblocked"
+    updateqqflags
+    REPLY="u" # fake update
+  fi
+  # b flip show/hide completed jobs
+  if [ "$REPLY" == "c" ]; then
+    let "ignoredone=1-ignoredone"
+    updateqqflags
+    REPLY="u" # fake update
+  fi
+  # q to quit
+  if [ "$REPLY" == "q" ]; then
+    cont=0
+    echo -ne "\010"
+  fi
+  # c to commit hold, releases and kills
+  if [ "$REPLY" == "c" ]; then
+    commit
+  fi
+  # i to re-initialize
+  if [ "$REPLY" == "i" ]; then
+    forced_reinit="user action"
+    rm -f $datafilecopy.done 2>/dev/null
+    cleanup
+    update2
+  fi
+  # u to update
+  if [ "$REPLY" == "u" ]; then
+    if [ -z "$status2" ]; then
+      update1
+      update2
+    else
+      status2="[Updating in the background -- have patience]"
+      redraw
+    fi
+  fi
+  # h to mark as held
+  if [ "$REPLY" == "h" ]; then
+    mark_as_held
+    let "cursorat++"
+  fi
+  # r to mark as to-be-released
+  if [ "$REPLY" == "r" ]; then
+    mark_as_release
+    let "cursorat++"
+  fi
+  # k to mark as to-be-deleted
+  if [ "$REPLY" == "k" ]; then
+    mark_as_delete
+    let "cursorat++"
+  fi
+  # Up-arrow
+  if [ "$REPLY" == "A" ]; then
+    let "cursorat--"
+  fi
+  # Home (^[[H~ or ^[[1~)
+  if [ "$REPLY" == "H" ] || [ "$REPLY" == "1" ]; then
+    let "cursorat=1"
+  fi
+  # End
+  if [ "$REPLY" == "F" ] || [ "$REPLY" == "4" ]; then
+    let "cursorat=ndata"
+  fi
+  # Down-arrow
+  if [ "$REPLY" == "B" ]; then
+    let "cursorat++"
+  fi
+  # PgUp (^[[5~)
+  if [ "$REPLY" == "5" ]; then
+    let "cursorat-=pgupdn"
+  fi
+  # PgDn (^[[6~)
+  if [ "$REPLY" == "6" ]; then
+    let "cursorat+=pgupdn"
+  fi
+  # d flip debug mode on/off
+  if [ "$REPLY" == "d" ]; then
+    let "debug=1-debug"
+  fi
+  echo -ne "\010\010\010\010\010\010\033[1;37;41m*BUSY*\033[0m"
+done
+
+echo -e "\nBye!"

@@ -1,0 +1,78 @@
+#!/bin/bash
+##########################################################################################
+# Chops (zeroes) values below a certain threshold in a .cube file.
+#
+# v1.00 2010.03.17 jd, first version
+##########################################################################################
+##########################################################################################
+ver="1.00"
+ang2bohr=1.889726313
+##########################################################################################
+
+improper_invocation() {
+  echo "Improper invocation."
+  echo "Supply two arguments -- the name of the input cube file and the chop-off threshold." >&2
+  echo "Aborting!"
+  exit 101
+}
+
+echo
+echo "*** cubechop v$ver. Chops (zeroes) values below a certain threshold in a .cube file."
+echo "                    2010.03 Jacek Dziedzic, jack.erede@gmail.com"
+echo
+
+if [ $# -ne 2 ]; then
+  improper_invocation
+fi 
+
+f=$1
+threshold=$2
+outf=`echo $f | sed -r "s/\.cube\$/_chopped.cube/"`
+
+if [ ! -r "$f" ]; then
+  echo "$f not readable. Aborting!" >&2
+  exit 102
+fi
+
+echo "Chopping $f -> $outf (@ a threshold of $threshold)"
+
+# Get the number of atoms first, to find out how large the header is
+Nat=`cat $f | awk 'NR==3 {print $1}'`
+echo "The cube file has $Nat atoms."
+if [ -z "$Nat" ]; then
+  echo "Malformed .cube file. Aborting!" >&2
+  exit 103
+fi
+if [ $Nat -lt 0 ]; then
+  echo "Molecular-orbital cube files are not supported. Aborting!" >&2
+  exit 104
+fi
+
+cat $f | awk -v threshold=$threshold -v Nat=$Nat '
+
+                    # copy over the header and pointwise cores
+                    NR <=6+Nat {print $0};
+
+                    # ignore rest of header and pointwise cores as well
+		    NR > 6+Nat {
+                                 printf(" ");
+                                 for(i=1; i<=NF; ++i) {
+                                   if($i<threshold) {
+                                     printf("%12.5e%s",0.0," ");
+                                     chopped++;
+                                   }
+                                   else {
+                                     printf("%12.5e%s",$i," ");
+                                     not_chopped++;
+                                   }
+                                 }
+                                 printf("\n");
+                                 if((n++ % 1000) == 0) printf(".") > "/dev/stderr";
+		               }
+                    END {
+                          printf("\nChopped    %9d%s",chopped," values.\n") > "/dev/stderr";
+                          printf("Left alone %9d%s",not_chopped," values.\n") > "/dev/stderr";
+                          printf("In total   %9d%s",chopped+not_chopped," values.\n") > "/dev/stderr";
+                        }
+	     ' > $outf
+

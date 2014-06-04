@@ -1,0 +1,161 @@
+#!/bin/bash
+# shows user jobs on iridis. created by S. Fox 2011
+
+run=0;el=0;bl=0;more=0;Uqstat=0
+
+abort() {
+  echo >&2
+  echo "Aborting!" >&2
+  echo >&2
+  exit $errcode
+}
+
+if [ $# -eq "0" ] ; then
+echo -e "flags \n
+Displays jobs based on where in the queue they are.
+-a all jobs
+-r running jobs
+-e eligible jobs
+-b blocked jobs
+-m reason for job block 
+
+Displays jobs based on submission order
+-q uses qstat instead of showq
+
+
+running  : Job id, no. nodes, required walltime, status, time running, directory, log name
+eligible : Job id, no. nodes, required walltime, status, xfactor, rank in queue, directory, log name
+blocked  : Job id, no. nodes, required walltime, status, directory, log name
+
+"
+errcode=1 ; abort >&2
+fi
+
+#set arguements to zero and reassign
+while getopts "aeirbmq h:" flag; do
+	if [ "$flag" == "?" ]; then
+		echo "Improper invocation." >&2
+		echo -e " flags \n
+Displays jobs based on where in the queue they are.
+-a all jobs
+-r running jobs
+-e eligible jobs
+-b blocked jobs
+-m reason for job block 
+
+Displays jobs based on submission order
+-q uses qstat instead of showq
+
+
+running  : Job id, no. nodes, required walltime, status, time running, directory, log name
+eligible : Job id, no. nodes, required walltime, status, xfactor, rank in queue, directory, log name
+blocked  : Job id, no. nodes, required walltime, status, directory, log name
+"
+errcode=1; abort
+        fi
+        if [ "$flag" == "a" ] ; then run=1 ;el=1;bl=1;more=0; fi
+        if [ "$flag" == "e" ] ; then el=1  ; fi
+        if [ "$flag" == "i" ] ; then el=1  ; fi
+        if [ "$flag" == "r" ] ; then run=1 ; fi
+        if [ "$flag" == "b" ] ; then bl=1  ; fi
+        if [ "$flag" == "m" ] ; then more=1; fi
+	if [ "$flag" == "q" ] ; then Uqstat=1 ; fi
+	if [ "$flag" == "h" ] ; then me=$OPTARG ; else me=`whoami` ; fi
+
+done
+
+#clear # clears terminal
+date # writes time and date
+
+#generate data for all jobs
+qstat -a  > /tmp/tmp.${me}qsta
+
+if [ $run == 1 ] || [ $el=1 ] || [ $bl=1 ] ; then 
+	qstat -f | grep Output_Path -A2 | sed "/--/d" | awk '{ if (NR%3 == 0 ) printf("%s%s%s \n", prev2, prev, $0 ) ;  prev2=prev ; prev=$0  }' | sed "s/\t//g" | awk '{print $3}' > /tmp/tmp.${me}qstaf
+fi
+if [ $el == 1 ] ; then
+	showq -i > /tmp/tmp.${me}shq
+	showq -w user=$me -i > /tmp/tmp.${me}shqi
+fi
+if [ $run == 1 ] ; then
+	showq -w user=$me -r > /tmp/tmp.${me}shqr 
+fi
+if [ $bl == 1 ] ; then 
+	showq -w user=$me -b > /tmp/tmp.${me}shqb 
+fi
+
+#colours
+COL_GREEN="\x1b[32;01m" 
+COL_YEL="\x1b[33;01m"
+COL_RED="\x1b[31;01m"
+COL_RESET="\x1b[39;49;00m"
+
+echo -e "\n"
+rencount=0 ; eencount=0
+
+#running jobs
+if [ $run == 1 ] ; then
+
+	for i in `cat  /tmp/tmp.${me}shqr | grep $me| sed "s/\*//" | awk  '{print $1}'` ; do 
+		if [ `grep $i /tmp/tmp.${me}shqr | awk '{print $6}'` == "en" ] ; then  
+			COL="\x1b[1;32;4m"; rencount=$[$rencount+1] 
+		else 
+			COL="\x1b[32;01m" 
+		 fi  
+        
+	        echo -e $COL $i $COL_RESET `cat /tmp/tmp.${me}qsta | grep ^$i |awk '{print $6,$9,$10,$11}'` ` cat /tmp/tmp.${me}qstaf  | grep \/.*\/${me}.*o${i} -o | sed "s/log_//" | awk -F"." '{print $1"."$2}' | awk  -v col="\x1b[32;01m" -v nocol=$COL_RESET -F"/" '{OFS="/"}{A=$NF ; NF-- ; print $0 ; print col A nocol}'` $COL_RESET  
+
+	done
+fi
+
+#eligible jobs
+if [ $el == 1 ] ; then	
+	for i in `cat /tmp/tmp.${me}shqi | grep $me |awk  '{print $1}'` ; do 
+		if ( echo $i | grep -q "*" ) ;then 
+			res="TRUE" ; i=`echo $i | sed "s/\*//" ` 
+		else 
+			res="FALSE" 
+		fi
+		if [ `grep $i /tmp/tmp.${me}shqi | awk '{print $4}'` == "en" ] ; then  
+			COL="\x1b[1;33;4m"; eencount=$[$eencount+1] 
+		else 
+			COL="\x1b[33;01m" 
+		fi
+        
+	        echo -e $COL $i $COL_RESET `cat /tmp/tmp.${me}qsta | grep ^$i |awk '{print $6,$9,$10,$11}'` `cat /tmp/tmp.${me}shq | grep ^[0-9] | awk -v ii=$i '{if ($1==ii) print $3, NR}' ` `if ( echo $res | grep -q "TRUE" ) ; then  checkjob $i | grep  "Reserved Nodes"  | awk -v col=$COL -v nocol=$COL_RESET '{print col "run in "$3")" nocol }'; fi ` ` cat /tmp/tmp.${me}qstaf  | grep \/.*\/${me}.*o${i} -o  | awk -F"." '{print $1"."$2}' | awk -F "/" '{OFS="/"}{A=$NF ; NF-- ; print $0 " " A}' ` $COL_RESET 
+	done
+fi
+
+#blocked jobs
+if [ $bl == 1 ] ; then
+        for i in `cat /tmp/tmp.${me}shqb | grep $me | awk  '{print $1}'` ; do
+		if ( grep -q $i /tmp/tmp.${me}shqb ) ; then 
+			COL="\x1b[31;01m"  
+			bb="TRUE" 
+		else 
+			bb="FALSE" 
+		fi
+
+                echo -e  $COL $i $COL_RESET `cat /tmp/tmp.${me}qsta | grep ^$i |awk '{print $6,$9,$10,$11}'`   `cat /tmp/tmp.${me}qstaf | grep \/.*\/${me}.*o${i}  -o | awk -F"." '{print $1"."$2}'  | awk -F "/" '{OFS="/"}{A=$NF ; NF-- ; print $0 " " A}' `  
+			if  [ $more == 1 ]  ; then  
+				echo -e  \\t  $COL -`checkjob $i | grep "BLOCK MSG" | awk -F"(" '{print $1}'`   $COL_RESET  
+			fi
+	done
+fi
+
+if [ $Uqstat == 1 ] ; then 
+	for i in `qstat -u $me | grep $me | awk -F"." '{print $1}'` ; do 
+		echo $i `qstat -a $i | grep $me |awk '{print $6,$9,$10,$11}'`  ` qstat -f $i | grep Output_Path -A2 | sed "/--/d" | awk '{ if (NR%3 == 0 ) printf("%s%s%s \n", prev2, prev, $0 ) ; ; prev2=prev ; prev=$0  }' | sed "s/\t//g" | awk '{print $3}' |  grep \/.*\/${me}.*o${i} -o | sed "s/log_//" | awk -F"." '{print $1"."$2}' | awk -F "/" '{OFS="/"}{A=$NF ; NF-- ; print $0 " " A}'`
+	done | sort -k5 -n -r | sort -k4 -r
+fi
+
+echo -e "\n"
+
+#total of each kind on queue
+if [ $run == 1 ]  || [ $el == 1 ] || [ $bl == 1 ] ; then
+	echo `tail -n2 /tmp/tmp.${me}shqr | awk '{print $3}' 
+	tail -n2 /tmp/tmp.${me}shqi  | awk '{print $3}' 
+	tail -n2 /tmp/tmp.${me}shqb | awk '{print $3}'` |  awk -v green=$COL_GREEN -v yellow=$COL_YEL -v red=$COL_RED -v  nocol=$COL_RESET -v ren=$rencount -v een=$eencount '{ print green $1, "active job(s)" } { print yellow $2, "eligible job(s)"}{print red $3, "blocked job(s)"  nocol }{ print "Total jobs: ", $1+$2+$3 }'
+fi
+
+

@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# ars: save current queue on a file. Rename previous one for comparison
+# Created by Alvaro Ruiz Serrano on Sept 2011
+
+cp -af ~/queue.2 ~/queue.1
+
+date > ~/queue.2
+qstat -a >> ~/queue.2
+countjobs >> ~/queue.2

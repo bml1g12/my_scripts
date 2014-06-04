@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Finds the average value of moduli in a file composed of numbers
+
+if [ $# -gt 1 ]; then
+  echo "Improper invocation: supply either no parameters (to read from the stdin) or one parameter -- the input filename."
+  exit 129
+fi
+
+if [ $# -eq 1 ]; then
+  filename="$1"
+else
+  filename="/dev/stdin"
+fi
+
+cat "$filename" | awk 'BEGIN{sum=0; count=0;} {for(i=1;i<=NF;++i) {sum+=abs($i); count++;} } function abs(x) {if(x>0) return x; else return -x; } END{print sum/count," with ",count, " entries and total sum ",sum}'
+

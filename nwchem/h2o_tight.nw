@@ -1,0 +1,44 @@
+Title "EXP010NRb"
+
+start  EXP010NRb
+
+print medium "task time"
+#print high
+
+echo
+
+charge 0
+
+geometry autosym units angstrom
+end
+
+ecce_print ecce.out
+
+basis "ao basis" cartesian print
+  H library aug-cc-pvtz
+  O library aug-cc-pvtz
+  Si library aug-cc-pvtz
+END
+
+
+dft
+  direct
+  tolerances accCoul 10
+  tolerances tol_rho 1e-12
+  tolerances radius 35.0
+  tolerances tight
+  grid xfine
+  convergence energy 1e-8 
+  mult 1
+  XC xpbe96 cpbe96
+  mulliken
+  decomp
+  print geometry
+end
+
+driver
+  default
+  maxiter 100
+end
+
+task dft optimize

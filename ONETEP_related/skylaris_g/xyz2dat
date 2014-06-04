@@ -1,0 +1,139 @@
+#!/bin/bash
+#generates a dat file from an xyz file.
+#created by sjf 11/2012
+#additional files needed:
+#	getlines
+#	xyz2dat.header
+#	xyz2dat.recpots
+#	xyz2dat.ngwfsrad
+
+abort() {
+  echo >&2
+  echo "Aborting!" >&2
+  echo >&2
+  exit $errcode
+}
+
+me=`whoami`
+if [ -a xyz2dat.header ] ; then
+echo "using xyz2dat files from this directory"
+elif [ -a  /home/$me/bin/xyz2dat.header ] ; then
+cp /home/$me/bin/xyz2dat.* .
+echo "using xyz2dat files from /home/$me/bin/xyz2dat.header "
+else
+echo -e " \n xyz2dat files not found"
+errcode=1 ; abort >&2
+fi
+
+
+if [ $# -eq "0" ] || [ $1 == "help" ] || [ $1 == "flags" ] ; then 
+echo -e "flags \n
+                -A leave units as angstroms ; defualt converts to bohr 
+                -p for periodic systems, adds buffer only to outside edges
+                eg. lowest atoms in x, y, and z will be zero, box edge will be \"\$buffer\" from highest atoms
+        
+                eg xyz2dat -f file.xyz -p 2
+        
+                -r buffer size (distance from atoms to endge of box
+                -f xyz file name
+" 
+errcode=1 ; abort >&2
+fi
+
+
+cube="F" ; cutoff="F" ; implicit="F"; moe="F" ; files="1" ; qmqm="F"
+#set arguements to zero and reassign
+while getopts " A p:  f:  r: " flag; do
+        if [ "$flag" == "?" ]; then
+                echo "Improper invocation." >&2
+                echo -e " flags \n
+                -A leave units as angstroms ; defualt converts to bohr 
+		-p for periodic systems, adds buffer only to outside edges
+		eg. lowest atoms in x, y, and z will be zero, box edge will be \"\$buffer\" from highest atoms
+	
+		eg xyz2dat -f file.xyz -p 2
+        
+	        -r buffer size (distance from atoms to endge of box
+                -f xyz file name
+                "
+                   errcode=1; abort
+        fi
+        if [ "$flag" == "A" ] ; then bohr="1" ; else bohr="0.529177" ; fi
+        if [ "$flag" == "r" ] ; then buffer=$OPTARG ; else buffer="16" ; fi
+	if [ "$flag" == "f" ] ; then file=$OPTARG ; fi
+	if [ "$flag" == "p" ] ; then bufferout=$OPTARG ; buffer=0 ; else bufferout=$buffer ; fi
+done
+
+
+
+#for i in $@ ; do 
+
+#find min x, y, and z values
+	awk 'mx=="" || $2 < mx {mx=$2}; my=="" || $3 < my {my=$3}; mz=="" || $4 < mz {mz=$4};  END{ print mx, my, mz }' $file > tmp.$file.min
+
+	minx=`awk '{print $1}' tmp.$file.min`
+	miny=`awk '{print $2}' tmp.$file.min`
+	minz=`awk '{print $3}' tmp.$file.min`
+
+	if [ "$bohr" == "1" ] ; then buffer=`echo $(echo "$buffer*0.529177"| bc)` ; fi
+	tx=`echo $(echo "$buffer+($minx*-1)"|bc)`
+	ty=`echo $(echo "$buffer+($miny*-1)"|bc)`	
+	tz=`echo $(echo "$buffer+($minz*-1)"|bc)`
+
+#translate atoms to make buffer of size $buffer	
+	awk -v x=$tx -v y=$ty -v z=$tz -v b=$bohr '{OFS="\t"}{ if (NF==4) print $1, ($2+x)/b, ($3+y)/b, ($4+z)/b ; else print $0} ' $file > tmp.${file//nw.xyz/translated.xyz}
+
+#find max x, y, and z values 
+
+	awk 'mx=="0" || $2 > mx {mx=$2}; my=="0" || $3 > my {my=$3}; mz=="0" || $4 > mz {mz=$4};  END{ print mx, my, mz }' tmp.${file//nw.xyz/translated.xyz} > tmp.$file.max
+
+	maxx=`awk '{print $1}' tmp.$file.max`
+	maxy=`awk '{print $2}' tmp.$file.max`
+	maxz=`awk '{print $3}' tmp.$file.max`
+
+echo blue $bufferout
+	cellx=`echo $(echo "$bufferout+$maxx"|bc) ` # |  awk '{printf("%d\n",$0+=$0<0?0:0.9)}' 
+	celly=`echo $(echo "$bufferout+$maxy"|bc) ` # |  awk '{printf("%d\n",$0+=$0<0?0:0.9)}' 
+	cellz=`echo $(echo "$bufferout+$maxz"|bc) ` # |  awk '{printf("%d\n",$0+=$0<0?0:0.9)}' 
+echo yellow
+
+#make dat file
+	sed -n 1,27p xyz2dat.header > tmp 
+	if [ "$bohr" == "1" ] ; then echo " ANG" >> tmp ; fi
+	grep ^[A-WYZ]  tmp.${file//nw.xyz/translated.xyz} >> tmp
+	sed -n 28,80p xyz2dat.header >> tmp 
+
+
+#add box dimensions
+
+	sed -i -e "/\%block lattice_cart/a \ $cellx	0.0	0.0"  -e  " /\%block lattice_cart/a \ 0.0	$celly	0.0"  -e "/\%block lattice_cart/a \ 0.0	0.0	$cellz"  tmp
+
+
+
+
+#get atom names - add recpots and ngwf params
+	awk '{print $1}' $file | grep ^[A-Z] | uniq  > tmp.$file.atomnames
+	
+	natm=`cat tmp.$file.atomnames | wc -l`
+	for atm in `seq 1 $natm` ; do
+		ATOM=`getline tmp.$file.atomnames $atm`
+		if [ `grep $ATOM\  xyz2dat.recpots -c` == 0 ] ; then
+			echo -e "\x1b[31;01m $ATOM not found in xyz2dat.recpots \x1b[39;49;00m"
+		else
+			rec=`grep $ATOM\  xyz2dat.recpots `	
+			sed -i "/\%block species_pot/a \ $rec" tmp
+		fi
+		if [ `grep $ATOM\  xyz2dat.ngwfrad -c` == 0 ] ; then
+                        echo -e "\x1b[31;01m $ATOM not found in xyz2dat.ngwfrad \x1b[39;49;00m"
+                else
+			ngwfrad=`grep $ATOM\  xyz2dat.ngwfrad`
+			sed -i "/\%block species$/a \ $ngwfrad" tmp
+		fi
+	done
+
+
+	mv tmp ${file//xyz/dat}
+
+
+	rm tmp*
+#done

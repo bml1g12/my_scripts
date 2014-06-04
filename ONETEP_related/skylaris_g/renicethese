@@ -1,0 +1,27 @@
+#!/bin/bash
+
+if [ $# -ne 2 ]; then
+  echo "Improper invocation. Try:" >&2
+  echo "renicethese <nice_value> <pattern>" >&2
+  echo "The <pattern> will be passed to 'ps aux' and everything that matches will be reniced." >&2
+  echo "Aborting!" >&2
+  exit 101
+fi
+
+nicevalue=$1
+pattern=$2
+
+echo "--- Renicing these: ---"
+ps aux | grep $pattern | grep -v grep
+echo "-----------------------"
+ps aux | grep $pattern | grep -v grep | awk '{print $2}' | xargs renice $nicevalue
+failed=$?
+echo 
+if [ $failed -ne 0 ]; then
+  echo "*** Something (or everything) went wrong ***" >&2
+  echo
+  exit 102
+else
+  echo "*** OK"
+  echo
+fi

@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# This script groups together the analytical and numerical forces from a group of ".forcetest" files.
+
+# Created by Alvaro Ruiz Serrano in May 2011
+
+# Remove blank lines, '---' and xyz line
+for file in *forcetest ; do grep [A-Z0-9] $file > ${file//.forcetest/.csv} ; done
+# Remove '*'
+for icount in `seq 1 200` ; do for file in *csv ; do sed -i "s/*//" $file ; done ; done
+# Remove Element
+for file in *csv ; do sed -i "/Element/d" $file ; done
+
+# Separate Analytical and Numerical
+for file in *csv ; do awk '$1=="Numerical" && f{f=0;next} $1=="Analytical"{ f=1;next}f' $file > ${file//.csv/.analytical} ; done
+for file in *csv ; do grep "Numerical" -A 200 $file > ${file//.csv/.numerical} ; done
+for file in *numerical ; do sed -i "/Forces/d" $file ; done
+
+# Work with Analytical
+for file in *analytical ; do awk '{print $1,";",$2,";",$3}' $file >> ${file}_final ; awk '{print $1,";",$2,";",$4}' $file >> ${file}_final ; awk '{print $1,";",$2,";",$5}' $file >> ${file}_final ; done
+for file in *numerical ; do awk '{print $3}' $file >> ${file}_final ; awk '{print $4}' $file >> ${file}_final ; awk '{print $5}' $file >> ${file}_final ; done
+
+# Paste forces into spreadsheet
+for file in *.analytical_final ; do echo ${file//.analytical_final} > ${file//.analytical_final/.csv} ; paste -d: $file ${file//.analytical_final/.numerical_final} >> ${file//.analytical_final/.csv} ; done
+for file in *.csv ; do for i in `seq 1 1000` ; do sed -i "s/:/ ; /" $file ; done ; done
+
+# Paste all the csv's together in a column
+for file in *.csv ; do cat $file >> total_forces.csv ; done
+
+# Calculate statistical values
+  awk '{print $0,";",$5-$7}' total_forces.csv > total_forces_diff.csv
+
+# Add header
+sed -i  '1i Element; Number ; Analytical ; Numerical' total_forces.csv
+
+# Remove buffer files
+rm *analytical* *numerical* total_forces.csv

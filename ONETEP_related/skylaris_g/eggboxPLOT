@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# ars: this script searches in the output files of a set of eggbox effect calculations
+#      produced with eggboxGEN. Requires the axis in the grid (1,2,3=X,Y,Z) and
+#      the rootname of the bunch of output files
+# ars: Created by Alvaro Ruiz Serrano on 28/10/2011
+
+if [ $# -lt 2 ]; then
+  echo "Need two arguments: the axis (1,2,3) and the rootname of the files"
+  exit
+fi
+
+# ars: inputs
+axis=$1
+fileroot=$2
+
+# ars: welcome
+echo "Generating eggbox effect plots for the following files on grid direction" $axis ":"
+ls -v1 *${fileroot}*.out | awk '{print $1}'
+
+
+# ars: check grid space
+maxgrid=`grep "Grid space d${axis}" *$fileroot*.out | awk '{print $4}' | sed "s/a0//" | findmax | awk '{print $1}'`
+mingrid=`grep "Grid space d${axis}" *$fileroot*.out | awk '{print $4}' | sed "s/a0//" | findmin | awk '{print $1}'`
+if [ "$mingrid" == "$maxgrid" ] ; then
+   gridspace=$maxgrid;
+else
+   echo "maxgrid= " $maxgrid
+   echo "mingrid= " $mingrid
+   echo "Error: not all files have same grid spacing along direction" "$axis" ". ABORT.";
+   exit
+fi
+echo "gridspace= " $gridspace
+
+# ars: isolate displacements
+ls -v1 *$fileroot*.out | sed -e "s/${fileroot}_//" -e "s/.out//" | awk -v gridspace=$gridspace '{print $1/gridspace}' > disp.egg
+
+# ars: isolate rms
+# ars: find average
+rmsavg=`grep "<-- CG" *$fileroot*.out | awk '{print $3}' | findavg | awk '{print $1}'`
+echo "rmsavg= " $rmsavg
+for file in `ls -v1 *$fileroot*.out` ; do grep "<-- CG" $file ; done | awk -v rmsavg=$rmsavg '{print $2-rmsavg}' > rms.egg
+
+# ars: isolate energies
+energyavg=`grep "<-- CG" *$fileroot*.out | awk '{print $4}' | findavg | awk '{print $1}'`
+echo "energyavg= " $energyavg
+for file in `ls -v1 *$fileroot*.out` ; do grep "<-- CG" $file ; done | awk -v energyavg=$energyavg '{print $3-energyavg}' > energies.egg
+
+# ars: paste
+paste disp.egg rms.egg > ${fileroot}_rms.egg
+paste disp.egg energies.egg > ${fileroot}_energy.egg
+
+# ars: clean tabs
+sed -i "s/	/ /" ${fileroot}*.egg
+
+# ars: delete buffer
+rm disp.egg rms.egg energies.egg
+
+# ars: Good bye
+echo ""
+echo "Done! ^.^"

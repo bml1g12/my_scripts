@@ -1,0 +1,19 @@
+#!/bin/bash
+#creates an xyz from a dat file to view the structure
+#1st arguement is the dat file
+
+if ( echo $@ | grep \.dat -q ) ; then
+
+grep "%block.*positions_abs" -A 600000 $1 | grep "%endblock.*positions_abs" -B600000 | awk '{print $1, $2*0.529,$3*0.529,$4*0.529}' | sed -e "/%endblock /d" -e "s/%block/xyz/" > $1.xyz
+
+length=`cat $1.xyz | wc -l`
+
+sed -i "/xyz/i $(echo "$length -1" | bc)" $1.xyz
+echo  "output" $1.xyz
+vmd $1.xyz
+
+else 
+
+echo "need to supply a dat file"
+
+fi

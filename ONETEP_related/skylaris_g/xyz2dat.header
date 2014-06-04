@@ -1,0 +1,36 @@
+
+ cutoff_energy       : 800 eV
+ ngwf_threshold_orig : 0.000002
+ kernel_cutoff       : 1000
+ k_zero              : 3.5
+ write_xyz true
+
+ elec_cg_max 0
+ occ_mix 1.0
+
+ minit_lnv 10 
+ maxit_lnv 10 
+
+ write_denskern T
+ write_tightbox_ngwfs T
+
+ output_detail VERBOSE
+
+ xc_functional PBE
+ dispersion 1
+
+ maxit_ngwf_cg 40
+
+ %block lattice_cart
+ %endblock lattice_cart
+
+ %block positions_abs
+ %endblock positions_abs
+
+ %block species
+ %endblock species
+ 
+ %block species_pot
+ %endblock species_pot
+
+

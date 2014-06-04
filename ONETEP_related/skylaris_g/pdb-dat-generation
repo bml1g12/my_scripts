@@ -1,0 +1,69 @@
+#!/bin/bash
+# generates dat files from pdb
+#created by sjf 15/09
+# needs binary pdb-dat
+
+abort() {
+  echo >&2
+  echo "Aborting!" >&2
+  echo >&2
+  exit $errcode
+}
+
+me=`whoami`
+if [ -a  /home/$me/bin/pdb-dat ] ; then
+pdbdat="/home/$me/bin/pdb-dat"
+elif [ -a pdb-dat ] ; then
+pdbdat="pdb-dat"
+else
+echo -e " \n no pdb-dat binary"
+errcode=1 ; abort >&2
+fi
+
+if [ $# -eq "0" ] || [ $1 == "help" ] || [ $1 == "flags" ] ; then 
+echo -e "flags \n
+                -p file.pdb
+                -r buffer size (distance from atoms to endge of box
+                -f generates complex host and ligand dat files
+                -c if you want a cube box
+                -k if you want to use cutoff coulomb (for charged systems)
+                -i if you want to use implicit solvent model
+		-m if pdb from MOE
+" 
+errcode=1 ; abort >&2
+fi
+
+
+cube="F" ; cutoff="F" ; implicit="F"; moe="F" ; files="1"
+#set arguements to zero and reassign
+while getopts "r:  p: cfikm  " flag; do
+        if [ "$flag" == "?" ]; then
+                echo "Improper invocation." >&2
+                echo -e " flags \n
+		-p file.pdb
+		-r buffer size (distance from atoms to endge of box
+		-f number of files wanted. ie -f 3 => file_complex.dat file_host.dat file_ligand.dat
+			or -f 1 => file.dat
+		-c if you want a cube box
+		-k if you want to use cutoff coulomb (for charged systems)
+		-i if you want to use implicit solvent model
+		-m if pdb from MOE
+		"
+                   errcode=1; abort
+ 	fi
+        if [ "$flag" == "p" ] ; then pdb=$OPTARG ; fi
+        if [ "$flag" == "f" ] ; then files="3" ; fi
+        if [ "$flag" == "r" ] ; then buffer=$OPTARG ; else buffer="16" ; fi
+        if [ "$flag" == "c" ] ; then cube="T" ; fi
+        if [ "$flag" == "k" ] ; then cutoff="T" ; fi
+        if [ "$flag" == "i" ] ; then implicit="T" ; fi
+	if [ "$flag" == "m" ] ; then moe="T" ; fi
+done
+
+
+echo $pdbdat $files $cutoff $buffer $cube $implicit $moe $pdb
+
+$pdbdat $files $cutoff $buffer $cube $implicit $moe $pdb
+
+
+

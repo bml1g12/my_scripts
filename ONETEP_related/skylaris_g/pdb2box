@@ -1,0 +1,44 @@
+#!/bin/bash
+##########################################################################################
+# pdb2box -- computes the bounding box of a pdb file
+#
+# v1.00 2009.10.29 jd, first version
+# v1.05 2009.02.10 jd, prints useless info to stderr, not stdout
+# v1.10 2010.02.10 jd, prints box centre as well
+##########################################################################################
+##########################################################################################
+ver="1.10"
+##########################################################################################
+
+improper_invocation() {
+  echo "Improper invocation. Supply one argument -- the name of the input pdb file. Aborting!" >&2
+  exit 101
+}
+
+echo "" >&2
+echo "*** pdb2box v$ver. Computes the bounding box of a pdb file." >&2
+echo "                   2009.10 Jacek Dziedzic, jack.erede@gmail.com" >&2
+echo "" >&2
+
+if [ $# -ne 1 ]; then
+  improper_invocation
+fi 
+
+f=$1
+
+cat $f | awk ' BEGIN {minx=miny=minz=9e99; maxx=maxy=maxz=-9e99;}
+
+              /ATOM/ {
+                       x=$6; y=$7; z=$8;
+		       if(x<minx) minx=x;
+		       if(y<miny) miny=y;
+		       if(z<minz) minz=z;
+		       if(x>maxx) maxx=x;
+		       if(y>maxy) maxy=y;
+		       if(z>maxz) maxz=z;
+                     }
+
+	         END {
+                       printf("( %g %g %g ) - ( %g %g %g ), box sides: %g %g %g, box centre: %g %g %g\n",minx, miny, minz, maxx,maxy,maxz,maxx-minx,maxy-miny,maxz-minz,minx+(maxx-minx)/2,miny+(maxy-miny)/2,minz+(maxz-minz)/2);
+		     }'
+		     

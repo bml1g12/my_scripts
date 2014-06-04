@@ -1,0 +1,5 @@
+#!/bin/bash
+
+#echo "Will need the password twice"
+#sshfs jd12g09@$IRIDIS3:/work/jd12g09 /local/scratch/jd12g09/Mnt/iridis/work
+sshfs jd12g09@$IRIDIS3: /local/scratch/jd12g09/Mnt/iridis/home

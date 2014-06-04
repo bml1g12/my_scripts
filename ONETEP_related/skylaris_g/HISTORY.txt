@@ -1,0 +1,107 @@
+commit ca6d1b2c5c054275d652ab947ab06c928036735d
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Wed Feb 29 17:39:56 2012 +0000
+
+    Added Stephen's scripts.
+
+commit 350043df21498a1c2a5a41d587eb1bc1fa5ec90e
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Wed Feb 29 17:39:30 2012 +0000
+
+    Added getline_every, linear_fit.
+
+commit 2d56a347b7cb8ef51aba6f543f89231b9bbe5308
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Wed Feb 29 17:38:50 2012 +0000
+
+    Added Alvaro's scripts.
+
+commit 8af3830025de8831c15426d5de0cb76784f57b46
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Wed Feb 29 17:36:19 2012 +0000
+
+    Fixed permissions on qq, qctrl.
+
+commit 6e789e1378cc5a25463a0e04ed592c19c2a575d6
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Wed Feb 29 17:36:04 2012 +0000
+
+    Updated qq, qctrl.
+
+commit 9a827ca8e89169631d451ffbd9194f324ef3f2e3
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Wed Feb 29 17:35:46 2012 +0000
+
+    Updated whatjobs.
+
+commit 1c8bd7b23c642957b7fa2abd556795a312f195a7
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Tue Jan 24 09:29:04 2012 +0000
+
+    unitconv updated to be more accurate for kcal/mol
+
+commit 47e9a50d06cc74001cd29fa6d8d0a889d78ad906
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Tue Jan 10 13:01:39 2012 +0000
+
+    Added pdb2dat, dx2cube, updated qq for new Moab on Iridis.
+
+commit 9a6684147a9634a454daea8a25f957339c29d905
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Fri Oct 21 17:23:44 2011 +0100
+
+    qq, qctrl updated for new Moab on Iridis
+
+commit 7d4732f0ef882037f64634b223205f00446203fc
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Sat Oct 8 14:01:00 2011 +0100
+
+    Added Alvaro's multiZ and Stephen's whatjobs.
+
+commit 30b02f09ef2bc45d4aaffd86eb04462fb5ca4b8e
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Sat Oct 8 14:00:29 2011 +0100
+
+    Updated qq and qctrl to support 7-digit job IDs.
+
+commit 4f30e4f3d4b528cc00734b12f58fd17ac3bc9fd7
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Tue Jul 26 14:22:04 2011 +0100
+
+    Added dx2cube.
+
+commit fe57fc8efdc39705707fff29ff349f76b690dbf9
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Wed Jul 13 10:46:29 2011 +0100
+
+    xyz-from-dat: Unknown update by Stephen
+
+commit 9be1a9d5de7e010611c9406789b58e65c27146c5
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Wed Jul 13 10:46:01 2011 +0100
+
+    pdb2dat: Updated to allow margins of zero and extra columns in PDB.
+
+commit e6776260c29cb6a9156bf4e212fa56609f7a6226
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Fri Jul 1 13:51:47 2011 +0100
+
+    Fixed datcentre
+
+commit 6446880001f9b031280bed5db9face1f00c9ceb6
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Fri Jul 1 13:20:04 2011 +0100
+
+    Added Stephen's xyz-from-dat
+
+commit 9b771bc6b5844eb475a661032d99de5a4c279eab
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Thu Jun 30 17:46:48 2011 +0100
+
+    Updated dat2bounds, committed qq, qctrl.
+
+commit 675b216053f2a3cd36dad2b357f1f93190251fea
+Author: Jacek Dziedzic <jd12g09@soton.ac.uk>
+Date:   Thu Jun 30 12:40:36 2011 +0100
+
+    First commit.

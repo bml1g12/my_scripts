@@ -1,0 +1,103 @@
+#!/bin/bash
+##########################################################################################
+# Takes a cube file as input and computes the charge of the system represented by the cube
+#
+# v0.01 2009.10.29 jd, first version
+# v1.00 2009.10.29 jd, should work
+# v1.20 2009.10.30 jd, supports changes in units, ignores negative voxel numbers
+# v1.30 2009.11.19 jd, default is: bohr angstrom, bow to Accelrys
+##########################################################################################
+##########################################################################################
+ver="1.30"
+ang2bohr=1.889726313
+##########################################################################################
+
+improper_invocation() {
+  echo "Improper invocation. Either"
+  echo "Supply one argument -- the name of the input cube file, or" >&2
+  echo "Supply three arguments -- the name of the input cube file followed by two unit specifications." >&2
+  echo "The unit specification is either \"bohr\" or \"angstrom\" and describes how the units should be interpreted" >&2
+  echo "for the lengths (bohr vs angstrom) and densities (|e|/bohr**3 vs |e|/angstrom**3), respectively." >&2
+  echo "The default is 'bohr angstrom (Accelrys-style)'."
+  echo "Aborting!"
+  exit 101
+}
+
+echo
+echo "*** cube2charge v$ver. Computes the total charge for a cube file."
+echo "                       2009.10 Jacek Dziedzic, jack.erede@gmail.com"
+echo
+
+if [ $# -ne 1 ] && [ $# -ne 3 ]; then
+  improper_invocation
+fi 
+
+f=$1
+
+unit_length="bohr"
+unit_dens="angstrom"
+
+if [ $# -gt 1 ]; then
+  unit_length=`echo $2 | tr [:upper:] [:lower:]`
+  unit_dens=`echo $3 | tr [:upper:] [:lower:]`
+fi
+
+if [ ! -r "$f" ]; then
+  echo "$f not readable. Aborting!" >&2
+  exit 102
+fi
+
+echo -n "Assumed unit of length: $unit_length"
+if [ $unit_length != "bohr" ] && [ $unit_length != "angstrom" ]; then
+  echo "... which is unrecognized. Aborting!"
+  exit 103
+fi  
+echo
+
+echo -n "Assumed unit of density: |e|/$unit_dens**3"
+if [ $unit_dens != "bohr" ] && [ $unit_dens != "angstrom" ]; then
+  echo "... which is unrecognized. Aborting!"
+  exit 103
+fi  
+echo
+
+# internally work in bohr and |e|/bohr**3
+cat $f | awk -v unit_length="$unit_length" -v unit_dens="$unit_dens" -v angstrom=$ang2bohr '
+                    function fail_non_cuboid() {
+                      print "This is not a cube, i.e. the box vectors are not perpendicular. Aborting!" > "/dev/stderr"
+		      exit(1);
+		    }
+		    
+		    function abs(x) {
+                      return ((x>0) ? x : -x);
+		    }
+
+                    # parse six-line header
+                    NR==3 {Nat=$1; if(Nat<0) {print "Molecular orbital cube files are not supported. Aborting!" > "/dev/stderr"; exit(2)}}
+		    NR==4 {Nvoxel_x=abs($1); voxel_dx=$2; if($3!=0.0 || $4!=0.0) fail_non_cuboid()}
+		    NR==5 {Nvoxel_y=abs($1); voxel_dy=$3; if($2!=0.0 || $4!=0.0) fail_non_cuboid()}
+		    NR==6 {
+		            Nvoxel_z=abs($1); voxel_dz=$4; if($2!=0.0 || $3!=0.0) fail_non_cuboid()
+			    Nvoxels=Nvoxel_x*Nvoxel_y*Nvoxel_z
+			    voxel_volume=voxel_dx*voxel_dy*voxel_dz
+			    if(unit_length == "angstrom") voxel_volume*=(angstrom*angstrom*angstrom)
+			    total_volume=voxel_volume*Nvoxels
+                            print "Natoms: " Nat ", Nvoxels: " Nvoxel_x " x " Nvoxel_y " x " Nvoxel_z " = " Nvoxels ", voxel_volume [bohr**3]: " voxel_volume ", cube_volume [bohr**3]: " total_volume > "/dev/stderr"
+			  }
+
+                    # parse Nat lines of nuclear charges
+		    NR > 6 && NR <= 6+Nat {
+		                            charge_nuclear+=$2;
+				          }
+		    NR > 6+Nat {
+                                 for(i=1; i<=NF; ++i) {charge_electronic += voxel_volume * $i}
+		               }
+ 		    
+                    END {
+                          if(unit_dens == "angstrom") charge_electronic/=(angstrom*angstrom*angstrom)
+		          printf("Nuclear charge: %12.6f %s\n",charge_nuclear,"|e|") > "/dev/stderr"
+		          printf("Electr. charge: %12.6f %s\n",charge_electronic," e") > "/dev/stderr"
+                          printf("Total   charge: %12.6f %s\n",charge_nuclear-charge_electronic,"|e|") > "/dev/stderr"
+                        }
+	     '
+

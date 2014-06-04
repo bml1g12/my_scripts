@@ -1,0 +1,54 @@
+#!/bin/bash
+
+# v1.95
+
+  echo 
+
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+  echo "Supply the name of the onetep out file, optionally followed by the energy component." >&2
+  echo "Allowed components: kinetic, psloc | vloc, psnl, hartree, xc, hfx, ewald, ionion, dispersion, smearedself, smearednonself, cavitation, total." >&2
+  exit 101
+fi
+
+f=$1
+
+if [ -z "$2" ]; then
+  component="total"
+else
+  component=$2
+fi
+
+if [ $component == "kinetic" ]; then togrep="Kinetic"; fi
+if [ $component == "psloc" ] || [ $component == "vloc" ]; then 
+  # Takes care of all 4 variants (usual, rspace, smeared-ion-corrected, smeared-ion-corrected-rspace)
+  togrep="Pseudo";
+  togrep2="(lo";
+fi
+if [ $component == "psnl" ]; then 
+  togrep="Pseudopotential (n"; 
+fi
+if [ $component == "hartree" ]; then togrep="Hartree"; fi
+if [ $component == "xc" ]; then togrep="Exchange"; fi
+if [ $component == "hfx" ]; then togrep="Hartree-Fock exchange"; fi
+if [ $component == "ewald" ]; then togrep="Ewald"; fi
+if [ $component == "ionion" ]; then togrep="Ion-ion"; fi
+if [ $component == "dispersion" ]; then togrep="Dispersion"; fi
+if [ $component == "smearedself" ]; then togrep="Smeared ion self"; fi
+if [ $component == "smearednonself" ]; then togrep="Smeared ion non-self"; fi
+if [ $component == "cavitation" ]; then togrep="Solvent cavitation"; fi
+if [ $component == "total" ]; then togrep="Total"; fi
+
+if [ -z "$togrep" ]; then
+  echo "Whaaaat?" >&2
+  exit 102
+fi
+
+if [ -r $f ]; then
+  # Locate the last box with "ENERGY COMPONENTS"
+  starthere=`cat $f | grep -n "ENERGY COMPONENTS (Eh)" | tr ":" " " | tail -n 1 | awk '{print $1}'`
+
+  # Head -n 1 is needed because psloc and hartree are reported twice (from matrix traces)
+  tail -n +$starthere $f | grep "| $togrep" | grep "$togrep2" | head -n 1 | tr "|:" " \n" | tail -n 1 | sed "s/ //g"
+else
+  exit 2
+fi
