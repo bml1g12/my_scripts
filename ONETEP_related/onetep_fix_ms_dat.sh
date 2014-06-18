@@ -1,6 +1,7 @@
 #!/bin/bash
 #Corrects and Generates ONETEP input files from Material Studio Input Files
 
+#18/06/2014 Changed to C6 text on output
 #14/05/2014 Changed 1000 to 1000 bohr for the kernel cutoff 
 #22/04/2014 Changes NGWF_radii to 9.0. Explicitly sets kernel_cutoff to 1000
 #20/12/2013 changed the grep display of the NGWF radius to use -w rather than ^ and $  
@@ -22,7 +23,7 @@ while getopts "i:uf" opt; do
       rm tail.part
       ;;
     u)
-      echo "-u Ultrafine_C5 tolerances was triggered" >&2
+      echo "-u Ultrafine_C6 tolerances was triggered" >&2
       option_flag=true
       awk 'NR==3 {print "!tolerances=-u Ultrafine"} 1' $infile > tmpfile && mv tmpfile $infile
       sed -i "s/NGWF_THRESHOLD_ORIG.*/NGWF_THRESHOLD_ORIG 0.0000018375/" $infile
@@ -33,7 +34,7 @@ while getopts "i:uf" opt; do
       sed -i "s/GEOM_DISP_TOL.*/GEOM_DISP_TOL 0.00050000000     ang/" $infile
       ;;
     f)
-      echo "-f fine_bl_C5 tolerances was triggered" >&2
+      echo "-f fine_bl_C6 tolerances was triggered" >&2
       option_flag=true
       sed -i "s/NGWF_THRESHOLD_ORIG.*/NGWF_THRESHOLD_ORIG 0.0000018375/" $infile
       sed -i "s/ELEC_ENERGY_TOL.*/ELEC_ENERGY_TOL 0.001     eV/" $infile
