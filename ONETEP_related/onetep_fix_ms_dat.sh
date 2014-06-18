@@ -71,6 +71,7 @@ sed -i "s/AUTO/SOLVE/" $infile
 #ensure the radii are set to the decimal point ending used in my summer project
 sed -i "s/O1 O 8 4.*/O1 O 8 4 9.0/" $infile
 sed -i "s/Si1 Si 14 4.*/Si1 Si 14 9 9.0/" $infile
+sed -i "s/Si1 Si.*/Si1 Si 14 9 9.0/" $infile
 sed -i "s/H1 H 1 1.*/H1 H 1 1 9.0/" $infile
 sed -i "s/O8 O 8 4.*/O8 O 8 4 9.0/" $infile
 sed -i "s/Si8 Si 14 4.*/Si8 Si 14 9 9.0/" $infile
