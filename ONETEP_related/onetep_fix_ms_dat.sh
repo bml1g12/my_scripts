@@ -94,9 +94,9 @@ EOEX
 
 echo "Copying .recpots to current working directory"
 
-cp /home/bml1g12/project/pseudopotentials/*.recpot .
+cp ~/project/pseudopotentials/*.recpot .
 
-cp -i /home/bml1g12/my_scripts/ONETEP_related/run_onetep_iridis4_3.5.9.8.pbs . 
+cp -i ~/my_scripts/ONETEP_related/run_onetep_iridis4_3.5.9.8.pbs . 
 
 echo "--- Done. It's `date`"
 
