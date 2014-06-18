@@ -19,7 +19,7 @@ while getopts "i:uf" opt; do
       infile=$OPTARG
       #create a tail file for all parts after the lattice dimensions, we will delete all the stuff before hand and replace it with dat_head.part 
       grep '%block lattice_cart' -A 9999 $infile > tail.part
-      cat /home/bml1g12/my_scripts/ONETEP_related/dat_head.part tail.part > $infile 
+      cat ~/my_scripts/ONETEP_related/dat_head.part tail.part > $infile 
       rm tail.part
       ;;
     u)
