@@ -4,10 +4,11 @@
 # The Intel compiler (2011.4) is used.
 # OpenMPI v1.4.3 is used.
 # FFTW3 included with the new MKL is used.
-
+# 27/06/2014: Fixed the submission to : ppn so nodes = nodes
+#
 #PBS -S /bin/bash
 #PBS -q batch
-#PBS -l nodes=3,tpn=16,naccesspolicy=singlejob
+#PBS -l nodes=3:ppn=16,naccesspolicy=singlejob
 #PBS -A sky
 #PBS -l walltime=60:00:00
 #PBS -N EXP047ORb_psinc_vconv

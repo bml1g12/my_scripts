@@ -1,4 +1,6 @@
 #/bin/bash
+ulimit -s unlimited
+export OMP_NUM_THREADS=1
 
 for dir in [0-9]*;
 do 

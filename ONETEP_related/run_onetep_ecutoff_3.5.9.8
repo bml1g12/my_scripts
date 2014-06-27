@@ -4,10 +4,11 @@
 # The Intel compiler (2011.4) is used.
 # OpenMPI v1.4.3 is used.
 # FFTW3 included with the new MKL is used.
+# 27/06/2014 fixed tpn to ppn so nodes are actually node counts
 
 #PBS -S /bin/bash
 #PBS -q batch
-#PBS -l nodes=2,tpn=16,naccesspolicy=singlejob
+#PBS -l nodes=2:ppn=16,naccesspolicy=singlejob
 #PBS -A sky
 #PBS -l walltime=60:00:00
 #PBS -N EXP027O_E_convergence

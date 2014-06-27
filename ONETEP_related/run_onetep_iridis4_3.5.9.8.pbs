@@ -1,12 +1,13 @@
-#example PBS submit script for Iridis3.
+#!/bin/bash
+# example PBS submit script for Iridis4.
 # Created by Jacek Dziedzic, 01/08/2011.
 # Modified by Ben Lowe 09/04/2014
+# 27/06/2014 fixed bug where nodes=x,tpn=y x meant number of cores and not number of nodes! 
 # 09/04/2014: added accurate wall timings
-
-
+#
 #PBS -S /bin/bash
 #PBS -q batch
-#PBS -l nodes=1,tpn=3,naccesspolicy=singlejob
+#PBS -l nodes=1:ppn=3,naccesspolicy=singlejob
 #PBS -A sky
 #PBS -l walltime=48:00:00
 #PBS -N EXP035O_water_IS
