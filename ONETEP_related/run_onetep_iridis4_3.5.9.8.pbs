@@ -46,13 +46,15 @@ if [ ! -x "$exe" ]; then
   exit 103
 fi
 
+#shows the nodes its running on
+cat $PBS_NODEFILE > $rootname.onetep
 
 module load openmpi/1.6.4/intel
 module unload intel/2013.4
 module load intel/mkl/2013.2
 module load intel/2013.2
 
-mpirun -np 3 $exe $rootname.dat > $rootname.onetep 2>$rootname.err
+mpirun -np 3 $exe $rootname.dat >> $rootname.onetep 2>$rootname.err
 #result below can be used to check T or F if ONETEP has executed correctly I think...
 result=$?
 

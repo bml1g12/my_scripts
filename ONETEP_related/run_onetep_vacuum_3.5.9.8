@@ -43,6 +43,9 @@ if [ ! -x "$exe" ]; then
   exit 103
 fi
 
+#shows the nodes its running on
+cat $PBS_NODEFILE > $rootname.onetep
+
 
 module load openmpi/1.6.4/intel
 module unload intel/2013.4
@@ -92,7 +95,7 @@ do
   #replace the z corrdinate with a number $i
   sed -i "$line"s/"$z_coordinate"/"$height"/ $rootname.dat
   echo "--- Running $exe in `pwd`. It's `date`"
-  mpirun -np 48 $exe $rootname.dat > $rootname.onetep 2>$rootname.err
+  mpirun -np 48 $exe $rootname.dat >> $rootname.onetep 2>$rootname.err
   #result=$?
   #rm -fr $TMPDIR
   cd ../
