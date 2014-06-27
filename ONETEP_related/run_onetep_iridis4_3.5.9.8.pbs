@@ -21,7 +21,7 @@ exe="/home/bml1g12/ONETEP_3.5.9.8/devel/bin/onetep.iridis4"
 
 cd $PBS_O_WORKDIR
 
-#export OMP_NUM_THREADS=2
+export OMP_NUM_THREADS=1
 ulimit -s unlimited
 
 START=$(date +%s.%N)
@@ -57,6 +57,7 @@ module unload intel/2013.4
 module load intel/mkl/2013.2
 module load intel/2013.2
 
+#remember to set OMP_NUM_THREADS appropriately
 mpirun -np $NO_OF_CORES $exe $rootname.dat >> $rootname.onetep 2>$rootname.err
 #result below can be used to check T or F if ONETEP has executed correctly I think...
 result=$?
