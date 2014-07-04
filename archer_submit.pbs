@@ -6,7 +6,7 @@
 
 # PBS job options (name, compute nodes, job time)
 #PBS -N O_
-#PBS -l select=5
+#PBS -l select=1
 #PBS -q long
 #PBS -l walltime=48:0:0
 
@@ -52,11 +52,11 @@ ulimit -s unlimited
 export OMP_NUM_THREADS=1
 
 #result=$?
-#- n Total parallel processes #defualt=1
-#- N parallel proccesors per node #default = detault=24
-#- S parallel processes per NUMA region #default =12
-#- d threads per parallel process #default =1
-aprun -n 120 -N 24 -S 12 -d 1 $exe $rootname.dat > $rootname.onetep 2> $rootname.err
+#- n Total MPI processes = NODES*N. #defualt=1. NOT total CPUs
+#- N MPI procceses per node #default = detault=24
+#- S Half N usually. MPI processes per NUMA region #default =12
+#- d OpenMP threads per MPI process #default =1
+aprun -n 24 -N 24 -S 12 -d 1 $exe $rootname.dat > $rootname.onetep 2> $rootname.err
 
 #rm -fr $TMPDIR
 
