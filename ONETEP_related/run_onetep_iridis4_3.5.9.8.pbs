@@ -50,7 +50,7 @@ fi
 cat $PBS_NODEFILE > $rootname.onetep
 NO_OF_CORES=`cat $PBS_NODEFILE | egrep -v '^#'\|'^$' | wc -l | awk '{print $1}'`
 NO_OF_NODES=`uniq $PBS_NODEFILE | wc -l`
-echo "Running on $NO_OF_CORES cores between $NO_OF_NODES" >> $rootname.onetep 
+echo "Running on $NO_OF_CORES cores between $NO_OF_NODES nodes" >> $rootname.onetep 
 
 module load openmpi/1.6.4/intel
 module unload intel/2013.4
