@@ -7,7 +7,7 @@
 #
 #PBS -S /bin/bash
 #PBS -q batch
-#PBS -l nodes=1:ppn=3,naccesspolicy=singlejob
+#PBS -l nodes=1:ppn=16,naccesspolicy=singlejob
 #PBS -A sky
 #PBS -l walltime=48:00:00
 #PBS -N EXP035O_water_IS
