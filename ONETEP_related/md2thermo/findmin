@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Finds the minimum value in a file composed of numbers
+
+if [ $# -gt 1 ]; then
+  echo "Improper invocation: supply either no parameters (to read from the stdin) or one parameter -- the input filename."
+  exit 129
+fi
+
+if [ $# -eq 1 ]; then
+  filename="$1"
+else
+  filename="/dev/stdin"
+fi
+
+cat "$filename" | awk 'BEGIN{el=9e99} {for(i=1;i<=NF;++i) if($i<el) {el=$i; x=i; y=NR;} } END{print el," at row ", y, " col ", x}'
+

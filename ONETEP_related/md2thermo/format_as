@@ -1,0 +1,3 @@
+#!/bin/bash
+
+cat /dev/stdin | awk -v format=$1 '{printf(format"\n",$1)}'
