@@ -1,5 +1,8 @@
 #!/bin/bash
 #Corrects and Generates ONETEP input files from Material Studio Input Files
+# Takes the -i option .dat file input and copies all parts after the lattice dimensions into tail.part
+#  then merges head.part with tail.part to produce the $infile which is modified based on -f or -u options 
+
 
 #23/06/2014 Fixed the NGWF radii awk such that it works better for Si1/Si8
 #18/06/2014 Changed to C6 text on output

@@ -1,9 +1,9 @@
 #PBS -S /bin/bash
 #PBS -q batch
-#PBS -l nodes=1,tpn=6
+#PBS -l nodes=1:ppn=16,naccesspolicy=singlejob
 #PBS -A sky
 #PBS -l walltime=24:00:00
-#PBS -N EXP007N_SiOH
+#PBS -N EXP013N_minRb
 ## - To prevent other jobs from running on the same node: PBS -W "x=NACCESSPOLICY:SINGLEJOB"
 
 # Full path-and-filename of your ONETEP executable, adjust to your needs
