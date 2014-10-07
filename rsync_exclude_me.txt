@@ -1,0 +1,14 @@
+*.dkn
+*.tightbox_ngwfs
+*.cube
+*.grd
+*.bfgs_back
+*.aoints.*
+*.sxmatrices
+*.fxmatrices
+rsync.sh
+*.gridpts.*
+
+tmp_datetime.log
+tmp_rsync.log
+
