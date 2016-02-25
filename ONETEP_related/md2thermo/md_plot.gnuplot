@@ -2,6 +2,8 @@
 set multiplot
 set autoscale
 set ytic auto
+set lmargin 10
+set xtics 5
 set size 1.0,0.25
 set origin 0.0,0.0;
 plot "thermo" using 1:2 with linespoints title 'Temperature (K)';
